@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Payment Successful - Gameboy Retreat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="success-container">
+        <h1>Success!</h1>
+        <p>Your payment was processed successfully</p>
+        <p>Check your email for order confirmation</p>
+        <p><small>Session ID: {{ session_id }}</small></p>
+        <a href="/" class="back-button">Back to Shop</a>
+    </div>
+</body>
+</html>

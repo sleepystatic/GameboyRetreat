@@ -1,0 +1,625 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: #0a0a0a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    font-family: monospace;
+    overflow: hidden;
+    touch-action: manipulation;
+    overscroll-behavior: none;
+    position: fixed;
+
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.gameboy-container {
+    position: relative;
+    transform: scale(1.2);
+    transform-origin: center center;
+}
+
+.shell {
+    height: auto;
+    display: block;
+}
+
+/* Default screen styles (will be overridden by console-specific styles below) */
+.screen {
+    position: absolute;
+    background: #b2f2bb;
+    padding: 10px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    border: 2px solid #222;
+    font-family: monospace;
+}
+
+/* Custom scrollbar styling - retro Game Boy style */
+.screen::-webkit-scrollbar {
+    width: 8px;
+}
+
+.screen::-webkit-scrollbar-track {
+    background: #a0a0a0;
+    border-left: 1px solid #606060;
+}
+
+.screen::-webkit-scrollbar-thumb {
+    background: #4a4a4a;
+    border: 1px solid #606060;
+}
+
+.screen::-webkit-scrollbar-thumb:hover {
+    background: #2a2a2a;
+}
+
+.screen {
+    scrollbar-width: thin;
+    scrollbar-color: #4a4a4a #a0a0a0;
+}
+
+.menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.menu li {
+    padding: 6px;
+    font-size: 16px;
+    color: #222;
+    cursor: default;
+    line-height: 1.2;
+}
+
+.menu-item.active {
+    background: #444;
+    color: #fff;
+}
+
+.gallery-image {
+    padding: 2px !important;
+    text-align: center;
+    position: relative;
+}
+
+.product-image {
+    max-width: 100%;
+    max-height: 100px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border: 1px solid #444;
+    background: #fff;
+}
+
+.navigation-hint {
+    font-size: 10px;
+    color: #666;
+    margin-top: 2px;
+}
+
+.gallery-title,
+.gallery-description,
+.gallery-price,
+.cart-item-title,
+.cart-item-image,
+.cart-item-price,
+.cart-total {
+    background: transparent !important;
+    color: #222 !important;
+    cursor: default;
+    pointer-events: none;
+}
+
+.cart-item-title {
+    font-weight: bold;
+    text-align: center;
+    padding: 4px !important;
+}
+
+.cart-item-image {
+    text-align: center;
+    padding: 4px !important;
+}
+
+.cart-item-price {
+    text-align: center;
+    font-size: 13px;
+    padding: 4px 4px 8px 4px !important;
+    margin-bottom: 4px;
+}
+
+.cart-total {
+    font-weight: bold;
+    border-top: 1px solid #444;
+    margin-top: 4px;
+    padding-top: 4px !important;
+}
+
+.gallery-image.active,
+.menu-item.active {
+    background: #444;
+    color: #fff;
+}
+
+.gallery-image.active .navigation-hint {
+    color: #ccc;
+}
+
+.cart-message {
+    padding-top: 20px;
+    text-align: center;
+}
+
+.cart-message .menu-item {
+    font-size: 14px;
+    padding: 4px;
+}
+
+/* Base button styles */
+.button-zones .btn {
+    position: absolute;
+    width: 25px;
+    height: 25px;
+    background: transparent;
+    z-index: 10;
+    cursor: pointer;
+    border-radius: 50%;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.button-zones .btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.button-zones .btn:active {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(0.95);
+}
+
+/* ========================================
+   GBA (HORIZONTAL) LAYOUT - DESKTOP
+   ======================================== */
+
+.gameboy-container[data-console="gba"] .screen {
+    top: 358px;
+    left: 289px;
+    width: 446px;
+    height: 266px;
+}
+
+.gameboy-container[data-console="gba"] .button-zones .up {
+    top: 411px;
+    left: 134px;
+}
+
+.gameboy-container[data-console="gba"] .button-zones .down {
+    top: 490px;
+    left: 134px;
+}
+
+.gameboy-container[data-console="gba"] .button-zones .right {
+    top: 451px;
+    left: 176px;
+}
+
+.gameboy-container[data-console="gba"] .button-zones .left {
+    top: 451px;
+    left: 92px;
+}
+
+.gameboy-container[data-console="gba"] .button-zones .a {
+    top: 414.5px;
+    left: 892px;
+    width: 55px;
+    height: 55px;
+}
+
+.gameboy-container[data-console="gba"] .button-zones .b {
+    top: 444.5px;
+    left: 806.5px;
+    width: 55px;
+    height: 55px;
+}
+
+.gameboy-container[data-console="gba"] .gameboy-title {
+    top: 650px;
+    font-size: 32px;
+}
+
+
+/* ========================================
+   GBA SP (VERTICAL) LAYOUT - MOBILE
+   ======================================== */
+
+.gameboy-container[data-console="gbasp"] .screen {
+    /* TODO: Measure these from your GBASP image */
+    top: 70px;
+    left: 294px;
+    width: 218px;
+    height: 160px;
+}
+
+.gameboy-container[data-console="gbasp"] .button-zones .up {
+    /* TODO: Measure these from your GBASP image */
+    top: 383px;
+    left: 315px;
+}
+
+.gameboy-container[data-console="gbasp"] .button-zones .down {
+    /* TODO: Measure these from your GBASP image */
+    top: 425px;
+    left: 315px;
+}
+
+.gameboy-container[data-console="gbasp"] .button-zones .right {
+    /* TODO: Measure these from your GBASP image */
+    top: 405px;
+    left: 337px;
+}
+
+.gameboy-container[data-console="gbasp"] .button-zones .left {
+    /* TODO: Measure these from your GBASP image */
+    top: 405px;
+    left: 292px;
+}
+
+.gameboy-container[data-console="gbasp"] .button-zones .a {
+    /* TODO: Measure these from your GBASP image */
+    top: 393px;
+    left: 483px;
+    width: 30px;
+    height: 30px;
+}
+
+.gameboy-container[data-console="gbasp"] .button-zones .b {
+    /* TODO: Measure these from your GBASP image */
+    top: 406px;
+    left: 435px;
+    width: 30px;
+    height: 30px;
+}
+
+.gameboy-container[data-console="gbasp"] .gameboy-title {
+    /* TODO: Adjust title position for SP layout */
+    top: 231px;
+}
+
+
+/* ======================================== */
+
+.background-elements {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background: #0a0a0a;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.background-elements video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
+}
+
+.hidden {
+    display: none;
+}
+
+.menu li {
+    font-size: 14px;
+}
+
+.menu-item strong {
+    font-size: 15px;
+}
+
+.gameboy-container[data-console="gba"] .menu li {
+    font-size: 20px;  /* Adjust this - try 17px or 18px */
+    padding: 7px;     /* Adjust padding too if needed */
+}
+
+.gameboy-container[data-console="gba"] .menu-item strong {
+    font-size: 8px;  /* Adjust this too */
+}
+
+
+.enlarged-image {
+    text-align: center;
+    padding-top: 10px;
+}
+
+.enlarged-image-container {
+    padding: 5px !important;
+}
+
+.enlarged-product-image {
+    max-width: 100%;
+    max-height: 80px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border: 2px solid #444;
+    background: #fff;
+}
+
+.menu-item {
+    transition: all 0.1s ease;
+}
+
+@font-face {
+    font-family: 'GameboyFont';
+    src: url('/static/fonts/pixel-font.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+.gameboy-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'GameboyFont', monospace;
+    font-size: 18px;
+    color: #b2f2bb;
+    text-align: center;
+    letter-spacing: 1px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+}
+
+.success-container {
+    max-width: 600px;
+    margin: 100px auto;
+    padding: 40px;
+    text-align: center;
+    background: #1a1a1a;
+    border-radius: 10px;
+    color: #b2f2bb;
+}
+
+.success-container h1 {
+    font-family: 'GameboyFont', monospace;
+    font-size: 48px;
+    margin-bottom: 20px;
+    color: #b2f2bb;
+}
+
+.success-container p {
+    font-size: 18px;
+    margin: 20px 0;
+    color: #fff;
+}
+
+.cancel-container {
+    max-width: 600px;
+    margin: 100px auto;
+    padding: 40px;
+    text-align: center;
+    background: #1a1a1a;
+    border-radius: 10px;
+    color: #ff6b6b;
+}
+
+.cancel-container h1 {
+    font-family: 'GameboyFont', monospace;
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.cancel-container p {
+    font-size: 18px;
+    margin: 20px 0;
+    color: #fff;
+}
+
+.back-button {
+    display: inline-block;
+    margin-top: 30px;
+    padding: 15px 30px;
+    background: #b2f2bb;
+    color: #000;
+    text-decoration: none;
+    border-radius: 5px;
+    font-family: monospace;
+    font-weight: bold;
+}
+
+.back-button:hover {
+    background: #51cf66;
+}
+
+.chat-icon {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    background: #b2f2bb;
+    border: 3px solid #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 28px;
+    z-index: 1000;
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.3);
+}
+
+.chat-icon:hover {
+    background: #51cf66;
+}
+
+.chat-box {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 320px;
+    height: 450px;
+    background: #e8e8d8;
+    border: 4px solid #222;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    font-family: monospace;
+    box-shadow: 6px 6px 0px rgba(0, 0, 0, 0.3);
+}
+
+.chat-box.hidden {
+    display: none;
+}
+
+.chat-header {
+    background: #222;
+    color: #b2f2bb;
+    padding: 12px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid #000;
+}
+
+.chat-close {
+    background: transparent;
+    border: none;
+    color: #b2f2bb;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-close:hover {
+    color: #ff6b6b;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.chat-message {
+    padding: 10px;
+    border: 2px solid #222;
+    background: #fff;
+    font-size: 14px;
+    line-height: 1.4;
+    max-width: 80%;
+}
+
+.bot-message {
+    align-self: flex-start;
+    background: #fff;
+}
+
+.user-message {
+    align-self: flex-end;
+    background: #b2f2bb;
+    text-align: right;
+}
+
+.chat-input-container {
+    display: flex;
+    border-top: 3px solid #222;
+    background: #fff;
+}
+
+.chat-input {
+    flex: 1;
+    border: none;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 14px;
+    background: #fff;
+}
+
+.chat-input:focus {
+    outline: none;
+}
+
+.chat-send {
+    background: #b2f2bb;
+    border: none;
+    border-left: 3px solid #222;
+    padding: 0 20px;
+    font-size: 20px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.chat-send:hover {
+    background: #51cf66;
+}
+
+.chat-send:active {
+    background: #37b24d;
+}
+
+.chat-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.chat-button {
+    background: #b2f2bb;
+    border: 2px solid #222;
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 13px;
+    cursor: pointer;
+    flex: 1;
+    min-width: 80px;
+}
+
+.chat-button:hover {
+    background: #51cf66;
+}
+
+.chat-button:active {
+    background: #37b24d;
+}
+
+@media (max-width: 768px) {
+    .chat-box {
+        width: calc(100vw - 40px);
+        right: 20px;
+        left: 20px;
+        height: 300px;
+    }
+
+    .chat-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+    }

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gameboy Retreat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://js.stripe.com/v3/"></script>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9J969LYCWY"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'G-9J969LYCWY');
+    </script>
+</head>
+<body data-stripe-key="{{ stripe_key }}">
+    <div class="background-elements">
+        <video autoplay loop muted playsinline preload="auto" disablepictureinpicture>
+            <source src="{{ url_for('static', filename='background.mp4') }}" type="video/mp4">
+            Your browser does not support video.
+        </video>
+    </div>
+
+    <div class="gameboy-container" data-console="gba">
+        <!-- Only ONE shell image - JavaScript will swap the src -->
+        <img src="{{ url_for('static', filename='gba.png') }}" alt="Game Boy Shell" class="shell">
+
+        <div class="gameboy-title">GAMEBOY RETREAT</div>
+
+        <div class="button-zones">
+            <div class="btn up" data-key="ArrowUp"></div>
+            <div class="btn down" data-key="ArrowDown"></div>
+            <div class="btn right" data-key="ArrowRight"></div>
+            <div class="btn left" data-key="ArrowLeft"></div>
+            <div class="btn a" data-key="Enter"></div>
+            <div class="btn b" data-key="Escape"></div>
+        </div>
+
+        <div class="screen">
+            <ul class="menu active-menu" id="main-menu">
+                <li class="menu-item">Switch Console</li>
+                <li class="menu-item">Shop</li>
+                <li class="menu-item">Cart</li>
+                <li class="menu-item">About</li>
+            </ul>
+
+            <ul class="menu hidden" id="shop-menu">
+                <li class="menu-item active">Back</li>
+                <li class="menu-item">Gameboy Color</li>
+                <li class="menu-item">Gameboy Advance</li>
+                <li class="menu-item">Gameboy Advance SP</li>
+                <li class="menu-item">Nintendo DS Lite</li>
+            </ul>
+
+            <ul class="menu hidden" id="about-menu">
+                <li class="menu-item active">Back</li>
+                <li class="menu-item">Creator</li>
+                <li class="menu-item">Contact</li>
+                <li class="menu-item">Sleepy Static</li>
+                <li class="menu-item">Privacy Policy</li>
+            </ul>
+
+            <ul class="menu hidden" id="creator-menu">
+                <li class="menu-item">A private platform to purchase professionally refurbished handhelds and other games! </li>
+                <li class="menu-item">Back</li>
+            </ul>
+
+            <ul class="menu hidden" id="contact-menu">
+                <li class="menu-item">Email: t.bryan.dev@gmail.com</li>
+                <li class="menu-item">Location: Stockton, CA</li>
+                <li class="menu-item">Chat: Use the chat bot in the corner!</li>
+                <li class="menu-item">Response Time: Within 24 hours</li>
+                <li class="menu-item active">Back</li>
+            </ul>
+
+            <ul class="menu hidden" id="privacy-menu">
+                <li class="menu-item">We collect minimal information: your email when you submit items to sell, and shipping info during checkout (processed securely by Stripe). We never sell your data. Emails are used only to respond to your inquiries. By using this site, you agree to these terms. Questions? Contact us at t.bryan.dev@gmail.com</li>
+                <li class="menu-item">Back</li>
+            </ul>
+
+            <ul class="menu hidden" id="cart-menu">
+                <li class="menu-item active">Back</li>
+                <li class="menu-item">Cart is Empty</li>
+            </ul>
+
+            <ul class="menu hidden" id="gallery-menu"></ul>
+        </div>
+    </div>
+
+        <div id="chat-icon" class="chat-icon">
+        <span>💬</span>
+    </div>
+
+    <div id="chat-box" class="chat-box hidden">
+        <div class="chat-header">
+            <span>SELL TO US</span>
+            <button id="chat-close" class="chat-close">✕</button>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <div class="chat-message bot-message">Got retro handhelds to sell? 🎮</div>
+        </div>
+        <div class="chat-input-container" id="chat-input-container">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Type here...">
+            <button id="chat-send" class="chat-send">→</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='chatbot.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
