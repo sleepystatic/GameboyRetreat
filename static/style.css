@@ -88,7 +88,7 @@ body {
 .gallery-image {
     padding: 2px !important;
     text-align: center;
-    position: relative;
+    position: relative;f
 }
 
 .product-image {
@@ -608,6 +608,10 @@ body {
 
 .chat-button:active {
     background: #37b24d;
+}
+
+* {
+    touch-action: manipulation;
 }
 
 @media (max-width: 768px) {

@@ -6,18 +6,9 @@ import sqlite3
 from datetime import datetime
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-
 load_dotenv()
 
 app = Flask(__name__)
-
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
 
 # Stripe configuration
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -66,7 +57,7 @@ def index():
 
 
 @app.route('/submit-seller', methods=['POST'])
-@limiter.limit("5 per hour")
+# @limiter.limit("5 per hour")
 def submit_seller():
     """Handle seller submission from chatbot"""
     try:
@@ -79,6 +70,7 @@ def submit_seller():
         shipping = data.get('shipping', '')
         email = data.get('email', '')
         timestamp = data.get('timestamp', datetime.now().isoformat())
+
 
         # Validate required fields
         if not all([item, condition, price, shipping, email]):
@@ -209,6 +201,18 @@ def success():
     session_id = request.args.get('session_id')
     return render_template('success.html', session_id=session_id)
 
+    if session_id:
+        try:
+            # Verify with Stripe that this session is real and paid
+            if session.payment_status == "paid":
+                return render_template('success.html', session_id=session_id)
+            else:
+                return redirect('/')
+        except:
+            return redirect('/')
+    else:
+        return redirect('/')
+
 
 @app.route('/cancel')
 def cancel():
@@ -235,6 +239,9 @@ def webhook():
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
+@app.errorhandler(404)
+def page_not_found(e):
+        return render_template('index.html', stripe_key=STRIPE_PUBLISHABLE_KEY), 404
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
