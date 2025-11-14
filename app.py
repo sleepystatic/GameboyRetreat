@@ -28,27 +28,37 @@ mail = Mail(app)
 # Database setup
 def init_db():
     """Initialize the database with sellers table"""
-    conn = sqlite3.connect('submissions.db')
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS sellers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            email TEXT NOT NULL,
-            item TEXT NOT NULL,
-            condition TEXT NOT NULL,
-            price TEXT NOT NULL,
-            shipping TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect('submissions.db', timeout=10)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS sellers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                email TEXT NOT NULL,
+                item TEXT NOT NULL,
+                condition TEXT NOT NULL,
+                price TEXT NOT NULL,
+                shipping TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error initializing database: {str(e)}")
+        # App will still start even if DB init fails
 
 
 # Initialize database on startup
 init_db()
+
+
+@app.route('/health')
+def health():
+    """Health check endpoint for Render"""
+    return jsonify({'status': 'healthy'}), 200
 
 
 @app.route('/')
@@ -77,15 +87,19 @@ def submit_seller():
             return jsonify({'error': 'Missing required fields'}), 400
 
         # Save to database
-        conn = sqlite3.connect('submissions.db')
-        c = conn.cursor()
-        c.execute('''
-            INSERT INTO sellers (email, item, condition, price, shipping, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (email, item, condition, price, shipping, timestamp))
-        conn.commit()
-        submission_id = c.lastrowid
-        conn.close()
+        conn = None
+        try:
+            conn = sqlite3.connect('submissions.db', timeout=10)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO sellers (email, item, condition, price, shipping, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (email, item, condition, price, shipping, timestamp))
+            conn.commit()
+            submission_id = c.lastrowid
+        finally:
+            if conn:
+                conn.close()
 
         # TODO: Send email notification
         # You can add email sending here using SendGrid, SMTP, etc.
@@ -127,12 +141,12 @@ def submit_seller():
 @app.route('/view-submissions')
 def view_submissions():
     """View all seller submissions - for admin use"""
+    conn = None
     try:
-        conn = sqlite3.connect('submissions.db')
+        conn = sqlite3.connect('submissions.db', timeout=10)
         c = conn.cursor()
         c.execute('SELECT * FROM sellers ORDER BY created_at DESC')
         submissions = c.fetchall()
-        conn.close()
 
         # Format for display
         formatted_submissions = []
@@ -152,6 +166,9 @@ def view_submissions():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.route('/create-checkout-session', methods=['POST'])
@@ -244,4 +261,6 @@ def page_not_found(e):
         return render_template('index.html', stripe_key=STRIPE_PUBLISHABLE_KEY), 404
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('FLASK_ENV') == 'development'
+    app.run(debug=debug, host='0.0.0.0', port=port)
