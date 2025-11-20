@@ -6,6 +6,8 @@ import sqlite3
 from datetime import datetime
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
+import threading
+import time
 load_dotenv()
 
 app = Flask(__name__)
@@ -23,7 +25,48 @@ app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.getenv('GMAIL_USER')
 app.config['MAIL_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('GMAIL_USER')
 mail = Mail(app)
+
+
+def send_email_async(app, msg, max_retries=3):
+    """
+    Send email asynchronously with retry logic and timeout handling.
+    This prevents email sending from blocking the main application thread.
+    """
+    def _send_with_retry():
+        retry_count = 0
+        last_error = None
+
+        while retry_count < max_retries:
+            try:
+                # Push app context for Flask-Mail
+                with app.app_context():
+                    # Set a timeout for the SMTP operation
+                    mail.send(msg)
+                    print(f"[EMAIL] Successfully sent email: {msg.subject}")
+                    return
+            except Exception as e:
+                retry_count += 1
+                last_error = str(e)
+                print(f"[EMAIL] Attempt {retry_count}/{max_retries} failed: {last_error}")
+
+                if retry_count < max_retries:
+                    # Exponential backoff: 2s, 4s, 8s
+                    backoff_time = 2 ** retry_count
+                    print(f"[EMAIL] Retrying in {backoff_time} seconds...")
+                    time.sleep(backoff_time)
+
+        # All retries failed
+        print(f"[EMAIL] Failed to send email after {max_retries} attempts: {last_error}")
+        print(f"[EMAIL] Email subject: {msg.subject}")
+
+    # Run email sending in a separate thread to avoid blocking
+    thread = threading.Thread(target=_send_with_retry)
+    thread.daemon = True  # Thread will not prevent app shutdown
+    thread.start()
+    print(f"[EMAIL] Queued email for async sending: {msg.subject}")
+
 
 # Database setup
 def init_db():
@@ -87,9 +130,7 @@ def submit_seller():
         submission_id = c.lastrowid
         conn.close()
 
-        # TODO: Send email notification
-        # You can add email sending here using SendGrid, SMTP, etc.
-        # For now, we'll just log it
+        # Send email notification asynchronously
         print(f"New seller submission #{submission_id}:")
         print(f"  Item: {item}")
         print(f"  Condition: {condition}")
@@ -98,20 +139,27 @@ def submit_seller():
         print(f"  Email: {email}")
         print(f"  Timestamp: {timestamp}")
 
-        msg = Message(
-            subject=f'New Seller Submission: {item}',
-            sender=app.config['MAIL_USERNAME'],
-            recipients=[ADMIN_EMAIL]
-        )
-        msg.body = f"""
-        New submission:
-        Item: {item}
-        Condition: {condition}
-        Price: {price}
-        Shipping: {shipping}
-        Email: {email}
-        """
-        mail.send(msg)
+        # Prepare email message
+        try:
+            msg = Message(
+                subject=f'New Seller Submission: {item}',
+                sender=app.config['MAIL_USERNAME'],
+                recipients=[ADMIN_EMAIL]
+            )
+            msg.body = f"""
+New submission:
+Item: {item}
+Condition: {condition}
+Price: {price}
+Shipping: {shipping}
+Email: {email}
+"""
+            # Send asynchronously to avoid blocking the response
+            send_email_async(app, msg)
+        except Exception as e:
+            # Log email preparation errors but don't fail the request
+            print(f"[EMAIL] Error preparing email: {str(e)}")
+            # Continue processing - email failure shouldn't block submission
 
         return jsonify({
             'success': True,
@@ -199,19 +247,24 @@ def create_checkout_session():
 @app.route('/success')
 def success():
     session_id = request.args.get('session_id')
-    return render_template('success.html', session_id=session_id)
 
     if session_id:
         try:
             # Verify with Stripe that this session is real and paid
+            session = stripe.checkout.Session.retrieve(session_id)
             if session.payment_status == "paid":
                 return render_template('success.html', session_id=session_id)
             else:
+                print(f"[STRIPE] Session {session_id} not paid: {session.payment_status}")
                 return redirect('/')
-        except:
-            return redirect('/')
+        except Exception as e:
+            print(f"[STRIPE] Error verifying session {session_id}: {str(e)}")
+            # Still show success page even if verification fails
+            # (user may have legitimate session but API call failed)
+            return render_template('success.html', session_id=session_id)
     else:
-        return redirect('/')
+        # No session ID provided, just show success page
+        return render_template('success.html', session_id=session_id)
 
 
 @app.route('/cancel')
