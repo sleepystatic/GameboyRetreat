@@ -26,3 +26,8 @@ Thumbs.db
 .env
 config.py
 submissions.db
+
+# Logs
+*.log
+app.log
+monitor.log

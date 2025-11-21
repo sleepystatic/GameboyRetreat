@@ -8,9 +8,38 @@ from flask_mail import Mail, Message
 from dotenv import load_dotenv
 import threading
 import time
+import logging
+import sys
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('app.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
+
+# Track application start time
+APP_START_TIME = datetime.now()
+logger.info(f"Application starting at {APP_START_TIME}")
+
+
+# Request logging middleware
+@app.before_request
+def log_request():
+    logger.info(f"{request.method} {request.path} from {request.remote_addr}")
+
+
+@app.after_request
+def log_response(response):
+    logger.info(f"{request.method} {request.path} -> {response.status_code}")
+    return response
 
 # Stripe configuration
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -44,28 +73,28 @@ def send_email_async(app, msg, max_retries=3):
                 with app.app_context():
                     # Set a timeout for the SMTP operation
                     mail.send(msg)
-                    print(f"[EMAIL] Successfully sent email: {msg.subject}")
+                    logger.info(f"[EMAIL] Successfully sent email: {msg.subject}")
                     return
             except Exception as e:
                 retry_count += 1
                 last_error = str(e)
-                print(f"[EMAIL] Attempt {retry_count}/{max_retries} failed: {last_error}")
+                logger.warning(f"[EMAIL] Attempt {retry_count}/{max_retries} failed: {last_error}")
 
                 if retry_count < max_retries:
                     # Exponential backoff: 2s, 4s, 8s
                     backoff_time = 2 ** retry_count
-                    print(f"[EMAIL] Retrying in {backoff_time} seconds...")
+                    logger.info(f"[EMAIL] Retrying in {backoff_time} seconds...")
                     time.sleep(backoff_time)
 
         # All retries failed
-        print(f"[EMAIL] Failed to send email after {max_retries} attempts: {last_error}")
-        print(f"[EMAIL] Email subject: {msg.subject}")
+        logger.error(f"[EMAIL] Failed to send email after {max_retries} attempts: {last_error}")
+        logger.error(f"[EMAIL] Email subject: {msg.subject}")
 
     # Run email sending in a separate thread to avoid blocking
     thread = threading.Thread(target=_send_with_retry)
     thread.daemon = True  # Thread will not prevent app shutdown
     thread.start()
-    print(f"[EMAIL] Queued email for async sending: {msg.subject}")
+    logger.info(f"[EMAIL] Queued email for async sending: {msg.subject}")
 
 
 # Database setup
@@ -97,6 +126,40 @@ init_db()
 @app.route('/')
 def index():
     return render_template('index.html', stripe_key=STRIPE_PUBLISHABLE_KEY)
+
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for monitoring"""
+    try:
+        # Check database connectivity
+        conn = sqlite3.connect('submissions.db', timeout=5)
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM sellers')
+        count = c.fetchone()[0]
+        conn.close()
+        db_status = 'healthy'
+    except Exception as e:
+        db_status = f'error: {str(e)}'
+        logger.error(f"Health check - Database error: {e}")
+
+    uptime = datetime.now() - APP_START_TIME
+    uptime_seconds = int(uptime.total_seconds())
+
+    health_data = {
+        'status': 'healthy' if db_status == 'healthy' else 'degraded',
+        'timestamp': datetime.now().isoformat(),
+        'uptime_seconds': uptime_seconds,
+        'uptime_human': str(uptime).split('.')[0],
+        'database': db_status,
+        'checks': {
+            'database_connection': db_status == 'healthy',
+            'environment_vars': bool(os.getenv('STRIPE_SECRET_KEY') and os.getenv('GMAIL_USER')),
+        }
+    }
+
+    status_code = 200 if health_data['status'] == 'healthy' else 503
+    return jsonify(health_data), status_code
 
 
 @app.route('/submit-seller', methods=['POST'])
@@ -131,13 +194,9 @@ def submit_seller():
         conn.close()
 
         # Send email notification asynchronously
-        print(f"New seller submission #{submission_id}:")
-        print(f"  Item: {item}")
-        print(f"  Condition: {condition}")
-        print(f"  Price: {price}")
-        print(f"  Shipping: {shipping}")
-        print(f"  Email: {email}")
-        print(f"  Timestamp: {timestamp}")
+        logger.info(f"New seller submission #{submission_id}:")
+        logger.info(f"  Item: {item}, Condition: {condition}, Price: {price}")
+        logger.info(f"  Shipping: {shipping}, Email: {email}")
 
         # Prepare email message
         try:
@@ -158,7 +217,7 @@ Email: {email}
             send_email_async(app, msg)
         except Exception as e:
             # Log email preparation errors but don't fail the request
-            print(f"[EMAIL] Error preparing email: {str(e)}")
+            logger.error(f"[EMAIL] Error preparing email: {str(e)}")
             # Continue processing - email failure shouldn't block submission
 
         return jsonify({
@@ -168,7 +227,7 @@ Email: {email}
         })
 
     except Exception as e:
-        print(f"Error in submit_seller: {str(e)}")
+        logger.error(f"Error in submit_seller: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
