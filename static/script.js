@@ -57,6 +57,7 @@
         let inGallery = false;
         let currentGalleryIndex = 0;
         let currentGalleryItems = [];
+        let currentImageIndex = 0;
         let cart = JSON.parse(localStorage.getItem('gameboyCart')) || [];
         let viewingFromCart = false;
 
@@ -128,7 +129,7 @@
                 id: `${item.category}-${currentGalleryIndex}`,
                 title: item.title,
                 price: item.price,
-                img: item.img,
+                img: item.images[0],
                 category: item.category
             };
 
@@ -285,6 +286,7 @@
 
         function enlargeImage() {
             const item = currentGalleryItems[currentGalleryIndex];
+            const currentImage = item.images[currentImageIndex] || item.images[0];
             const screen = document.querySelector('.screen');
             const originalContent = screen.innerHTML;
             let enlargedMode = true;
@@ -295,7 +297,7 @@
                 <div class="enlarged-image">
                     <div class="menu-item">${item.title}</div>
                     <div class="menu-item enlarged-image-container">
-                        <img src="${item.img}" alt="${item.title}" class="enlarged-product-image">
+                        <img src="${currentImage}" alt="${item.title}" class="enlarged-product-image">
                     </div>
                     <div class="menu-item active">Back</div>
                 </div>
@@ -303,15 +305,12 @@
 
             menuItems = document.querySelectorAll('.menu-item');
 
-
-
             function exitEnlargedMode() {
                 if (!enlargedMode) return;
                 enlargedMode = false;
                 screen.innerHTML = originalContent;
                 currentMenu = screen.querySelector('.menu.active-menu');
                 menuItems = currentMenu.querySelectorAll('.menu-item');
-
 
                 renderGalleryItem();
                 document.removeEventListener('keydown', tempBackHandler);
@@ -444,32 +443,31 @@
             if (inGallery) {
                 if (key === 'ArrowRight') {
                     currentGalleryIndex = (currentGalleryIndex + 1) % currentGalleryItems.length;
+                    currentImageIndex = 0;  // Reset to first image
                     renderGalleryItem();
                     return;
                 } else if (key === 'ArrowLeft') {
                     currentGalleryIndex = (currentGalleryIndex - 1 + currentGalleryItems.length) % currentGalleryItems.length;
+                    currentImageIndex = 0;  // Reset to first image
                     renderGalleryItem();
                     return;
                 } else if (key === 'ArrowUp') {
-                    if (currentIndex === 5) {
-                        currentIndex = 4;
-                    } else if (currentIndex === 4) {
-                        currentIndex = 1;
-                    } else {
-                        currentIndex = 5;
+                    // Cycle through images of current item
+                    const item = currentGalleryItems[currentGalleryIndex];
+                    if (item.images.length > 1) {
+                        currentImageIndex = (currentImageIndex - 1 + item.images.length) % item.images.length;
+                        renderGalleryItem();
                     }
-                    updateActivate(currentIndex);
                     return;
                 } else if (key === 'ArrowDown') {
-                    if (currentIndex === 1) {
-                        currentIndex = 4;
-                    } else if (currentIndex === 4) {
-                        currentIndex = 5;
-                    } else {
-                        currentIndex = 1;
+                    // Cycle through images of current item
+                    const item = currentGalleryItems[currentGalleryIndex];
+                    if (item.images.length > 1) {
+                        currentImageIndex = (currentImageIndex + 1) % item.images.length;
+                        renderGalleryItem();
                     }
-                    updateActivate(currentIndex);
                     return;
+
                 } else if (key === 'Enter') {
                     if (currentIndex === 1) {
                         enlargeImage();
@@ -564,7 +562,6 @@
         }
 
         function renderGalleryItem() {
-
             currentMenu.classList.remove('active-menu');
             currentMenu.classList.add('hidden');
 
@@ -575,11 +572,21 @@
             const item = currentGalleryItems[currentGalleryIndex];
             const backText = viewingFromCart ? 'Back to Cart' : 'Back';
 
+            // Get current image from array
+            const currentImage = item.images[currentImageIndex] || item.images[0];
+            const imageCount = item.images.length;
+
+            // Show image counter if multiple images
+            const imageNavHint = imageCount > 1
+                ? `<div class="navigation-hint">Image ${currentImageIndex + 1}/${imageCount} - ↑/↓ to change</div>`
+                : '';
+
             currentMenu.innerHTML = `
                 <li class="menu-item gallery-title">${item.title}</li>
                 <li class="menu-item gallery-image active">
-                    <img src="${item.img}" alt="${item.title}" class="product-image">
+                    <img src="${currentImage}" alt="${item.title}" class="product-image">
                     <div class="navigation-hint">←/→ browse items</div>
+                    ${imageNavHint}
                 </li>
                 <li class="menu-item gallery-description">${item.description}</li>
                 <li class="menu-item gallery-price">Price: $${item.price}</li>
@@ -588,7 +595,6 @@
             `;
 
             menuItems = currentMenu.querySelectorAll('.menu-item');
-
             currentIndex = 1;
             updateActivate(currentIndex);
         }
@@ -638,7 +644,7 @@
             ],
             'gameboy-advance-sp': [
                 {
-                    img: 'static/images/gbasp1.png',
+                    images: ['static/images/gbasp-rayquaza/gbasp1.jpg', 'static/images/gbasp-rayquaza/gbasp2.jpg', 'static/images/gbasp-rayquaza/gbasp3.jpg'],
                     title: 'Cobalt Blue SP',
                     description: 'AGS-101 model with bright backlit screen.',
                     price: 185,

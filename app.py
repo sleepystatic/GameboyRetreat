@@ -14,15 +14,16 @@ app = Flask(__name__)
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
 
-# Email configuration - UPDATE THESE
-ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')  # ← UPDATE THIS with your email
+
 
 # Email config
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.mailgun.org')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('GMAIL_USER')
-app.config['MAIL_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
+
 mail = Mail(app)
 
 # Database setup
@@ -101,7 +102,7 @@ def submit_seller():
         msg = Message(
             subject=f'New Seller Submission: {item}',
             sender=app.config['MAIL_USERNAME'],
-            recipients=[ADMIN_EMAIL]
+            recipients=[os.environ.get('MAIL_RECIPIENT')]
         )
         msg.body = f"""
         New submission:
@@ -119,9 +120,12 @@ def submit_seller():
             'submission_id': submission_id
         })
 
+
     except Exception as e:
-        print(f"Error in submit_seller: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Error sending email: {str(e)}")
+        import traceback
+        traceback.print_exc()  # This will show full error details
+        return jsonify({'success': False, 'message': f'Failed to send email: {str(e)}'}), 500
 
 
 @app.route('/view-submissions')
@@ -199,20 +203,19 @@ def create_checkout_session():
 @app.route('/success')
 def success():
     session_id = request.args.get('session_id')
-    return render_template('success.html', session_id=session_id)
 
     if session_id:
         try:
-            # Verify with Stripe that this session is real and paid
+            session = stripe.checkout.Session.retrieve(session_id)  # ← ADD THIS
             if session.payment_status == "paid":
                 return render_template('success.html', session_id=session_id)
             else:
-                return redirect('/')
-        except:
+                return redirect('/cancel')
+        except Exception as e:
+            print(f"Session error: {e}")
             return redirect('/')
     else:
-        return redirect('/')
-
+        return render_template('success.html', session_id=None)  # ← Or redirect to home
 
 @app.route('/cancel')
 def cancel():
