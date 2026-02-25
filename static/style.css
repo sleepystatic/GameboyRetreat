@@ -311,7 +311,7 @@ body {
     overflow: hidden;
 }
 
-.background-elements video {
+.background-elements img.background-gif {
     position: absolute;
     top: 50%;
     left: 50%;

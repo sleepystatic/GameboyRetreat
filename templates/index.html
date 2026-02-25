@@ -19,10 +19,7 @@
 </head>
 <body data-stripe-key="{{ stripe_key }}">
     <div class="background-elements">
-        <video autoplay loop muted playsinline preload="auto" disablepictureinpicture>
-            <source src="{{ url_for('static', filename='background.mp4') }}" type="video/mp4">
-            Your browser does not support video.
-        </video>
+        <img src="{{ url_for('static', filename='background.gif') }}" alt="Background animation" class="background-gif">
     </div>
 
     <div class="gameboy-container" data-console="+gba">

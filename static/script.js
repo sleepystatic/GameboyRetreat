@@ -1,13 +1,4 @@
 
-    // Force background video to play on mobile
-    window.addEventListener('DOMContentLoaded', () => {
-        const bgVideo = document.querySelector('.background-elements video');
-        if (bgVideo) {
-            bgVideo.play().catch(err => {
-                console.log('Video autoplay failed:', err);
-            });
-        }
-    });
 
     // Device-specific console detection - SIMPLIFIED
     (function() {
