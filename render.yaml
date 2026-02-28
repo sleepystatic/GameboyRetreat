@@ -2,34 +2,19 @@ services:
   - type: web
     name: gameboyretreat
     env: python
-    region: oregon  # Change to your preferred region
-    plan: free  # Change to 'starter' or higher for production
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 60 --access-logfile - --error-logfile - app:app
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
-      - key: STRIPE_SECRET_KEY
-        sync: false  # Set in Render dashboard
-      - key: STRIPE_PUBLISHABLE_KEY
-        sync: false  # Set in Render dashboard
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false  # Set in Render dashboard
-      - key: ADMIN_EMAIL
-        sync: false  # Set in Render dashboard
-      - key: GMAIL_USER
-        sync: false  # Set in Render dashboard
-      - key: GMAIL_APP_PASSWORD
-        sync: false  # Set in Render dashboard
-
-    # Health check configuration - THIS IS KEY!
+    startCommand: gunicorn app:app
     healthCheckPath: /health
-
-    # Auto-deploy settings
-    autoDeploy: true
-
-    # Disk for SQLite database (free tier gets 1GB)
-    disk:
-      name: gameboy-data
-      mountPath: /opt/render/project/src
-      sizeGB: 1
+    envVars:
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
