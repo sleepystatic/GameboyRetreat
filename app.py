@@ -41,16 +41,15 @@ def log_request():
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
 
-# Email configuration - UPDATE THESE
-ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')  # ← UPDATE THIS with your email
 
-# Email config
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
+# Email config - Mailgun support
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.mailgun.org')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('GMAIL_USER')
-app.config['MAIL_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('GMAIL_USER')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
+
 mail = Mail(app)
 
 
@@ -173,7 +172,7 @@ def submit_seller():
             msg = Message(
                 subject=f'New Seller Submission: {item}',
                 sender=app.config['MAIL_USERNAME'],
-                recipients=[ADMIN_EMAIL]
+                recipients=[os.environ.get('MAIL_RECIPIENT')]
             )
             msg.body = f"""
 New submission:
@@ -196,9 +195,12 @@ Email: {email}
             'submission_id': submission_id
         })
 
+
     except Exception as e:
         logger.error(f"Error in submit_seller: {str(e)}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Failed to process submission: {str(e)}'}), 500
 
 
 @app.route('/view-submissions')
@@ -284,10 +286,10 @@ def success():
             if session.payment_status == "paid":
                 return render_template('success.html', session_id=session_id)
             else:
-                print(f"[STRIPE] Session {session_id} not paid: {session.payment_status}")
+                logger.warning(f"[STRIPE] Session {session_id} not paid: {session.payment_status}")
                 return redirect('/')
         except Exception as e:
-            print(f"[STRIPE] Error verifying session {session_id}: {str(e)}")
+            logger.error(f"[STRIPE] Error verifying session {session_id}: {str(e)}")
             # Still show success page even if verification fails
             # (user may have legitimate session but API call failed)
             return render_template('success.html', session_id=session_id)
