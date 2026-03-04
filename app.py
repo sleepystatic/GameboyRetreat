@@ -29,16 +29,13 @@ APP_START_TIME = datetime.now()
 logger.info(f"Application starting at {APP_START_TIME}")
 
 
-# Request logging middleware
+# Request logging middleware (disabled for performance)
+# Only log non-health-check requests to reduce overhead
 @app.before_request
 def log_request():
-    logger.info(f"{request.method} {request.path} from {request.remote_addr}")
-
-
-@app.after_request
-def log_response(response):
-    logger.info(f"{request.method} {request.path} -> {response.status_code}")
-    return response
+    # Skip logging health checks (called every 5 seconds by Render)
+    if request.path != '/health':
+        logger.info(f"{request.method} {request.path} from {request.remote_addr}")
 
 # Stripe configuration
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
@@ -129,36 +126,10 @@ def index():
 
 @app.route('/health')
 def health_check():
-    """Health check endpoint for monitoring"""
-    try:
-        # Check database connectivity
-        conn = sqlite3.connect('submissions.db', timeout=5)
-        c = conn.cursor()
-        c.execute('SELECT COUNT(*) FROM sellers')
-        count = c.fetchone()[0]
-        conn.close()
-        db_status = 'healthy'
-    except Exception as e:
-        db_status = f'error: {str(e)}'
-        logger.error(f"Health check - Database error: {e}")
-
-    uptime = datetime.now() - APP_START_TIME
-    uptime_seconds = int(uptime.total_seconds())
-
-    health_data = {
-        'status': 'healthy' if db_status == 'healthy' else 'degraded',
-        'timestamp': datetime.now().isoformat(),
-        'uptime_seconds': uptime_seconds,
-        'uptime_human': str(uptime).split('.')[0],
-        'database': db_status,
-        'checks': {
-            'database_connection': db_status == 'healthy',
-            'environment_vars': bool(os.getenv('STRIPE_SECRET_KEY') and os.getenv('GMAIL_USER')),
-        }
-    }
-
-    status_code = 200 if health_data['status'] == 'healthy' else 503
-    return jsonify(health_data), status_code
+    """Lightweight health check for Render (called every 5 seconds)"""
+    # Return minimal response for fast health checks
+    # No DB queries to avoid overhead from Render's frequent polling
+    return jsonify({'status': 'ok'}), 200
 
 
 @app.route('/submit-seller', methods=['POST'])
