@@ -645,8 +645,8 @@
             'gameboy-advance-sp': [
                 {
                     images: ['static/images/gbasp-rayquaza/gbasp1.jpg', 'static/images/gbasp-rayquaza/gbasp2.jpg', 'static/images/gbasp-rayquaza/gbasp3.jpg'],
-                    title: 'Cobalt Blue SP',
-                    description: 'AGS-101 model with bright backlit screen.',
+                    title: 'Rayquaza Edition',
+                    description: 'AGS-001 model fully refurbished and functioning like new.',
                     price: 185,
                     stock: 1
                 }

@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
+import requests
 load_dotenv()
 
 app = Flask(__name__)
