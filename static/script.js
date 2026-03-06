@@ -619,14 +619,14 @@
         const listings = {
             'gameboy-color': [
                 {
-                    img: 'static/images/gbc1.png',
+                    images: ['static/images/gbc1.png'],
                     title: 'Atomic Purple GBC',
                     description: 'Transparent shell with new buttons. Good working condition.',
                     price: 175,
                     stock: 2
                 },
                 {
-                    img: 'static/images/gbc2.png',
+                    images: ['static/images/gbc2.png'],
                     title: 'Teal Blue GBC',
                     description: 'Refurbished with backlit screen. Minor scratches on back.',
                     price: 200,
@@ -635,7 +635,7 @@
             ],
             'gameboy-advance': [
                 {
-                    img: 'static/images/gba1.png',
+                    images: ['static/images/gba1.png'],
                     title: 'Clear Purple GBA',
                     description: 'Fully refurbished with IPS screen upgrade.',
                     price: 160,
@@ -653,7 +653,7 @@
             ],
             'nintendo-ds-lite': [
                 {
-                    img: 'static/images/dslite1.png',
+                    images: ['static/images/dslite1.png'],
                     title: 'Polar White DS Lite',
                     description: 'Pristine condition with new shell.',
                     price: 150,
