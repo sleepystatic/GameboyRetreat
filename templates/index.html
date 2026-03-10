@@ -22,7 +22,7 @@
         <img src="{{ url_for('static', filename='background.gif') }}" alt="Background animation" class="background-gif">
     </div>
 
-    <div class="gameboy-container" data-console="+gba">
+    <div class="gameboy-container" data-console="gba">
         <!-- Only ONE shell image - JavaScript will swap the src -->
         <img src="{{ url_for('static', filename='gba.png') }}" alt="Game Boy Shell" class="shell">
 
@@ -85,7 +85,10 @@
             </ul>
 
             <ul class="menu hidden" id="gallery-menu"></ul>
+
+            <ul class="menu hidden" id="category-listings-menu"></ul>
         </div>
+
     </div>
 
         <div id="chat-icon" class="chat-icon">
@@ -104,6 +107,12 @@
             <input type="text" id="chat-input" class="chat-input" placeholder="Type here...">
             <button id="chat-send" class="chat-send">→</button>
         </div>
+    </div>
+
+    <div class="controls-legend">
+        <span>↑↓ Navigate</span>
+        <span>A = Select</span>
+        <span>B = Back</span>
     </div>
 
     <script src="{{ url_for('static', filename='chatbot.js') }}"></script>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Login - Gameboy Retreat</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #0a0a0a;
+            color: #b2f2bb;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .login-container {
+            background: #222;
+            padding: 40px;
+            border: 4px solid #b2f2bb;
+            box-shadow: 8px 8px 0px rgba(178, 242, 187, 0.3);
+            min-width: 300px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #b2f2bb;
+        }
+        input {
+            padding: 12px;
+            margin: 15px 0;
+            font-family: monospace;
+            width: 100%;
+            box-sizing: border-box;
+            border: 2px solid #b2f2bb;
+            background: #1a1a1a;
+            color: #b2f2bb;
+            font-size: 14px;
+        }
+        button {
+            background: #b2f2bb;
+            border: none;
+            padding: 12px 24px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 14px;
+            width: 100%;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #51cf66;
+        }
+        .error {
+            color: #ff6b6b;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h2>Admin Login</h2>
+        <form method="POST" action="/admin/login">
+            <input type="password" name="password" placeholder="Admin Password" required autofocus>
+            <button type="submit">Login</button>
+        </form>
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+    </div>
+</body>
+</html>

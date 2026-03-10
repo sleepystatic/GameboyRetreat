@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard - Gameboy Retreat</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #0a0a0a;
+            color: #b2f2bb;
+            padding: 20px;
+            margin: 0;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #b2f2bb;
+        }
+        h1 {
+            margin: 0;
+            color: #b2f2bb;
+        }
+        .logout {
+            background: #ff6b6b;
+            color: #fff;
+            padding: 10px 20px;
+            text-decoration: none;
+            border: 2px solid #ff6b6b;
+        }
+        .logout:hover {
+            background: #ff5252;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1a1a;
+            border: 2px solid #b2f2bb;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            background: #222;
+            color: #b2f2bb;
+            font-weight: bold;
+        }
+        tr:hover {
+            background: #222;
+        }
+        .no-orders {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Recent Orders</h1>
+        <a href="/admin/logout" class="logout">Logout</a>
+    </div>
+
+    {% if orders %}
+    <table>
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td>{{ order[1][:20] }}...</td>
+                <td>{{ order[2] }}</td>
+                <td>${{ "%.2f"|format(order[4]) }}</td>
+                <td>{{ order[10] }}</td>
+                <td>{{ order[7] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="no-orders">No orders yet</div>
+    {% endif %}
+</body>
+</html>
