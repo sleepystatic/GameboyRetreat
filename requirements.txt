@@ -1,1 +1,51 @@
-  a t t r s = = 2 4 . 3 . 0   B a r e N e c e s s i t i e s = = 0 . 2 . 8   b e a u t i f u l s o u p 4 = = 4 . 1 2 . 3   b l i n k e r = = 1 . 9 . 0   b s 4 = = 0 . 0 . 2   c e r t i f i = = 2 0 2 4 . 1 2 . 1 4   c f f i = = 1 . 1 7 . 1   c h a r s e t - n o r m a l i z e r = = 3 . 4 . 4   c h r o m e d r i v e r = = 2 . 2 4 . 1   c l i c k = = 8 . 2 . 1   c o l o r a m a = = 0 . 4 . 6   d o t e n v = = 0 . 9 . 9   F l a s k = = 3 . 0 . 0   f l a s k - c o r s = = 6 . 0 . 1   F l a s k - L o g i n = = 0 . 6 . 3   F l a s k - M a i l = = 0 . 9 . 1   F l a s k - S Q L A l c h e m y = = 3 . 1 . 1   g i t - f i l t e r - r e p o = = 2 . 4 7 . 0   g r e e n l e t = = 3 . 2 . 4   g u n i c o r n = = 2 1 . 2 . 0   h 1 1 = = 0 . 1 4 . 0   i d n a = = 3 . 1 0   i t s d a n g e r o u s = = 2 . 2 . 0   J i n j a 2 = = 3 . 1 . 6   M a i l = = 2 . 1 . 0   m a i l j e t - r e s t = = 1 . 3 . 4   M a r k u p S a f e = = 3 . 0 . 2   o u t c o m e = = 1 . 3 . 0 . p o s t 0   p a c k a g i n g = = 2 5 . 0   p s y c o p g 2 - b i n a r y = = 2 . 9 . 1 1   p y c p a r s e r = = 2 . 2 2   P y S o c k s = = 1 . 7 . 1   p y t h o n - d o t e n v = = 1 . 0 . 1   r e q u e s t s = = 2 . 3 1 . 0   s e l e n i u m = = 4 . 2 6 . 1   s e t u p t o o l s = = 8 0 . 9 . 0   s n i f f i o = = 1 . 3 . 1   s o r t e d c o n t a i n e r s = = 2 . 4 . 0   s o u p s i e v e = = 2 . 8   S Q L A l c h e m y = = 2 . 0 . 4 4   s t r i p e = = 8 . 0 . 0   t r i o = = 0 . 2 7 . 0   t r i o - w e b s o c k e t = = 0 . 1 1 . 1   t y p i n g _ e x t e n s i o n s = = 4 . 1 2 . 2   u n d e t e c t e d - c h r o m e d r i v e r = = 3 . 5 . 5   u r l l i b 3 = = 2 . 3 . 0   w e b d r i v e r - m a n a g e r = = 4 . 0 . 2   w e b s o c k e t - c l i e n t = = 1 . 8 . 0   w e b s o c k e t s = = 1 5 . 0 . 1   W e r k z e u g = = 3 . 0 . 0   w s p r o t o = = 1 . 2 . 0   
+attrs==24.3.0
+BareNecessities==0.2.8
+beautifulsoup4==4.12.3
+blinker==1.9.0
+bs4==0.0.2
+certifi==2024.12.14
+cffi==1.17.1
+charset-normalizer==3.4.4
+chromedriver==2.24.1
+click==8.2.1
+colorama==0.4.6
+dotenv==0.9.9
+Flask==3.0.0
+flask-cors==6.0.1
+Flask-Login==0.6.3
+Flask-Mail==0.9.1
+Flask-SQLAlchemy==3.1.1
+git-filter-repo==2.47.0
+greenlet==3.2.4
+gunicorn==21.2.0
+h11==0.14.0
+idna==3.10
+itsdangerous==2.2.0
+Jinja2==3.1.6
+Mail==2.1.0
+mailjet-rest==1.3.4
+MarkupSafe==3.0.2
+outcome==1.3.0.post0
+packaging==25.0
+psycopg2-binary==2.9.11
+pycparser==2.22
+PySocks==1.7.1
+python-dotenv==1.0.1
+requests==2.31.0
+selenium==4.26.1
+setuptools==80.9.0
+sniffio==1.3.1
+sortedcontainers==2.4.0
+soupsieve==2.8
+SQLAlchemy==2.0.44
+stripe==8.0.0
+trio==0.27.0
+trio-websocket==0.11.1
+typing_extensions==4.12.2
+undetected-chromedriver==3.5.5
+urllib3==2.3.0
+webdriver-manager==4.0.2
+websocket-client==1.8.0
+websockets==15.0.1
+Werkzeug==3.0.0
+wsproto==1.2.0
