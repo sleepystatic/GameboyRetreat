@@ -9,11 +9,13 @@
             // Mobile - SP
             shellImage.src = '/static/gbasp.png';
             gameboyContainer.setAttribute('data-console', 'gbasp');
+            document.body.classList.remove('landscape-mode');
             console.log('Set to GBASP');
         } else {
             // Desktop - GBA
             shellImage.src = '/static/gba.png';
             gameboyContainer.setAttribute('data-console', 'gba');
+            document.body.classList.remove('landscape-mode');
             console.log('Set to GBA');
         }
     }
@@ -35,7 +37,12 @@
         // Different scaling for different consoles on mobile
         if (screenWidth <= 768) {
             // Mobile devices
-            if (consoleType === 'gba') {
+            const isLandscapeMode = document.body.classList.contains('landscape-mode');
+            if (consoleType === 'gba' && isLandscapeMode) {
+                // Landscape-rotated GBA uses the phone's height as width
+                const availableWidth = window.innerHeight;
+                scale = Math.min(availableWidth / 1024, 0.75);
+            } else if (consoleType === 'gba') {
                 // Horizontal GBA needs to be smaller to fit
                 if (screenWidth <= 400) {
                     scale = 0.5;
@@ -439,6 +446,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const shellImage = gameboyContainer.querySelector('.shell');
                 shellImage.src = `/static/${newLayout}.png`;
                 gameboyContainer.setAttribute('data-console', newLayout);
+
+                const isMobile = window.innerWidth <= 768;
+                if (isMobile && newLayout === 'gba') {
+                    document.body.classList.add('landscape-mode');
+                    try { screen.orientation.lock('portrait').catch(() => {}); } catch(e) {}
+                } else {
+                    document.body.classList.remove('landscape-mode');
+                    try { screen.orientation.unlock(); } catch(e) {}
+                }
 
                 switchMenu('main-menu');
                 break;

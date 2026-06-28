@@ -314,7 +314,18 @@ body {
 }
 
 
-.background-elements img {
+.background-elements {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.background-elements img,
+.background-elements video {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -692,3 +703,22 @@ body {
         padding: 8px 14px;
         bottom: 10px;
     }
+}
+
+/* Mobile landscape mode — rotates the entire page 90° when GBA is selected on a portrait phone */
+@media (max-width: 768px) {
+    body.landscape-mode {
+        width: 100vh;
+        height: 100vw;
+        transform: rotate(90deg);
+        transform-origin: top left;
+        position: fixed;
+        top: 0;
+        left: 100vw;
+        overflow: hidden;
+    }
+
+    body.landscape-mode .controls-legend {
+        bottom: 10px;
+    }
+}
