@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory | Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+<header class="admin-header">
+    <h1>Inventory</h1>
+    <nav>
+        <a href="/admin/listings/new" class="btn-primary">+ New Listing</a>
+        <a href="/admin/dashboard">Orders</a>
+        <a href="/admin/logout">Log out</a>
+    </nav>
+</header>
+
+<main class="admin-main">
+    {% if not storage_ok %}
+    <div class="notice warn">
+        Supabase Storage is not configured, so photo uploads are disabled.
+        Set <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_KEY</code> to enable them.
+        You can still add listings using image URLs.
+    </div>
+    {% endif %}
+
+    {% if not items %}
+        <p class="empty">No listings yet. <a href="/admin/listings/new">Add the first one</a>.</p>
+    {% else %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Photo</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Stock</th>
+                <th>Link</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+            <tr class="{{ 'row-sold' if not item.in_stock else '' }}">
+                <td class="cell-thumb">
+                    {% if item.images %}
+                        <img src="{{ item.images[0] }}" alt="">
+                    {% else %}
+                        <span class="no-photo">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ item.title }}</td>
+                <td class="muted">{{ categories.get(item.category, item.category) }}</td>
+                <td>${{ '%.2f'|format(item.price) }}</td>
+                <td>
+                    <form method="post" action="/admin/listings/{{ item.id }}/stock" class="stock-form">
+                        <input type="number" name="stock" value="{{ item.stock }}" min="0">
+                        <button type="submit">Save</button>
+                    </form>
+                </td>
+                <td><a href="/listing/{{ item.slug }}" target="_blank">View &nearr;</a></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</main>
+</body>
+</html>

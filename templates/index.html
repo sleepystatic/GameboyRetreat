@@ -22,9 +22,18 @@
         <video muted autoplay loop playsinline src="{{ url_for('static', filename='background_loop.mp4') }}"></video>
     </div>
 
-    <div class="gameboy-container" data-console="gba">
-        <!-- Only ONE shell image - JavaScript will swap the src -->
-        <img src="{{ url_for('static', filename='gba.png') }}" alt="Game Boy Shell" class="shell">
+    <!-- Shell artwork is declared here and nowhere else - the console switcher reads
+         these attributes, so renaming a file only needs changing in one place. -->
+    <!-- data-content-* is the size of the visible shell inside its transparent
+         padding, in image pixels. The mobile scaler needs it to fit the console to
+         the viewport. Re-measure with tools/trim_shell_edges.py's bbox if you
+         regenerate the artwork. -->
+    <div class="gameboy-container" data-console="gba"
+         data-shell-gba="{{ url_for('static', filename='gba_trimmed.png') }}"
+         data-shell-gbasp="{{ url_for('static', filename='gbasp.png') }}"
+         data-content-gba="1193 633"
+         data-content-gbasp="297 553">
+        <img src="{{ url_for('static', filename='gba_trimmed.png') }}" alt="Game Boy Shell" class="shell">
 
         <div class="gameboy-title">GAMEBOY RETREAT</div>
 
@@ -35,59 +44,13 @@
             <div class="btn left" data-key="ArrowLeft"></div>
             <div class="btn a" data-key="Enter"></div>
             <div class="btn b" data-key="Escape"></div>
+            <div class="btn select" data-key="Shift"></div>
+            <div class="btn start" data-key=" "></div>
         </div>
 
-        <div class="screen">
-            <ul class="menu active-menu" id="main-menu">
-                <li class="menu-item">Switch Console</li>
-                <li class="menu-item">Shop</li>
-                <li class="menu-item">Cart</li>
-                <li class="menu-item">About</li>
-            </ul>
-
-            <ul class="menu hidden" id="shop-menu">
-                <li class="menu-item active">Back</li>
-                <li class="menu-item">Gameboy Color</li>
-                <li class="menu-item">Gameboy Advance</li>
-                <li class="menu-item">Gameboy Advance SP</li>
-                <li class="menu-item">Nintendo DS Lite</li>
-            </ul>
-
-            <ul class="menu hidden" id="about-menu">
-                <li class="menu-item active">Back</li>
-                <li class="menu-item">Creator</li>
-                <li class="menu-item">Contact</li>
-                <li class="menu-item">Static Designs</li>
-                <li class="menu-item">Privacy Policy</li>
-            </ul>
-
-            <ul class="menu hidden" id="creator-menu">
-                <li class="menu-item">A private platform to purchase professionally refurbished handhelds and other games! </li>
-                <li class="menu-item">Back</li>
-            </ul>
-
-            <ul class="menu hidden" id="contact-menu">
-                <li class="menu-item">Email: t.bryan.dev@gmail.com</li>
-                <li class="menu-item">Location: Stockton, CA</li>
-                <li class="menu-item">Chat: Use the chat bot in the corner!</li>
-                <li class="menu-item">Response Time: Within 24 hours</li>
-                <li class="menu-item active">Back</li>
-            </ul>
-
-            <ul class="menu hidden" id="privacy-menu">
-                <li class="menu-item">We collect minimal information: your email when you submit items to sell, and shipping info during checkout (processed securely by Stripe). We never sell your data. Emails are used only to respond to your inquiries. By using this site, you agree to these terms. Questions? Contact us at t.bryan.dev@gmail.com</li>
-                <li class="menu-item">Back</li>
-            </ul>
-
-            <ul class="menu hidden" id="cart-menu">
-                <li class="menu-item active">Back</li>
-                <li class="menu-item">Cart is Empty</li>
-            </ul>
-
-            <ul class="menu hidden" id="gallery-menu"></ul>
-
-            <ul class="menu hidden" id="category-listings-menu"></ul>
-        </div>
+        <!-- Menus are rendered from the MENUS object in script.js so that adding a
+             screen is one data entry rather than an edit here plus a new switch case. -->
+        <div class="screen"></div>
 
     </div>
 
@@ -114,6 +77,9 @@
         <span>A = Select</span>
         <span>B = Back</span>
     </div>
+
+    <!-- Shown only on portrait phones: turning the device is how you reach the GBA -->
+    <div class="rotate-hint">↻ Turn your phone sideways for the Game Boy Advance</div>
 
     <script src="{{ url_for('static', filename='chatbot.js') }}"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Listing | Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+<header class="admin-header">
+    <h1>New Listing</h1>
+    <nav>
+        <a href="/admin/listings">&larr; Inventory</a>
+        <a href="/admin/logout">Log out</a>
+    </nav>
+</header>
+
+<main class="admin-main narrow">
+    {% if errors %}
+    <div class="notice error">
+        <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="admin-form">
+        <label>
+            <span>Title</span>
+            <input type="text" name="title" required
+                   value="{{ form.title if form else '' }}"
+                   placeholder="Rayquaza Edition SP">
+            <small>Becomes the public URL, e.g. /listing/rayquaza-edition-sp</small>
+        </label>
+
+        <label>
+            <span>Category</span>
+            <select name="category" required>
+                <option value="">Choose one…</option>
+                {% for slug, label in categories.items() %}
+                <option value="{{ slug }}"
+                    {{ 'selected' if form and form.category == slug else '' }}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <div class="field-row">
+            <label>
+                <span>Price (USD)</span>
+                <input type="number" name="price" step="0.01" min="0" required
+                       value="{{ form.price if form else '' }}" placeholder="185.00">
+            </label>
+            <label>
+                <span>Stock</span>
+                <input type="number" name="stock" min="0" required
+                       value="{{ form.stock if form else '1' }}">
+                <small>0 shows the listing as sold out</small>
+            </label>
+        </div>
+
+        <label>
+            <span>Description</span>
+            <textarea name="description" rows="5"
+                      placeholder="What you did to it: shell, screen, cleaning, what was repaired, how it was tested.">{{ form.description if form else '' }}</textarea>
+            <small>This is what Google shows under the listing. Be specific.</small>
+        </label>
+
+        <label>
+            <span>Photos</span>
+            <input type="file" name="photos" multiple accept="image/*"
+                   {{ 'disabled' if not storage_ok else '' }}>
+            {% if storage_ok %}
+                <small>Resized to 1600px and converted to WebP automatically. First photo is the thumbnail.</small>
+            {% else %}
+                <small class="warn-text">Uploads disabled — Supabase Storage is not configured.</small>
+            {% endif %}
+        </label>
+
+        <label>
+            <span>Image URLs</span>
+            <textarea name="image_urls" rows="3"
+                      placeholder="https://example.com/photo.jpg">{{ form.image_urls if form else '' }}</textarea>
+            <small>Optional. One per line, added after any uploads.</small>
+        </label>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">Create Listing</button>
+            <a href="/admin/listings" class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

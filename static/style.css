@@ -126,17 +126,25 @@ body {
     margin-top: 2px;
 }
 
+/* Read-only rows: the cursor skips them, clicks pass through, and text cannot be
+   selected. `.info` is the general-purpose one - the rest are legacy names kept
+   because the runtime-generated menus still use them. Mirrors NON_SELECTABLE in
+   script.js; keep the two lists in step. */
+.info,
 .gallery-title,
 .gallery-description,
 .gallery-price,
 .cart-item-title,
 .cart-item-image,
 .cart-item-price,
-.cart-total {
+.cart-total,
+.cart-empty {
     background: transparent !important;
     color: #222 !important;
     cursor: default;
     pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .cart-item-title {
@@ -187,8 +195,8 @@ body {
 /* Base button styles */
 .button-zones .btn {
     position: absolute;
-    width: 25px;
-    height: 25px;
+    width: 35px;
+    height: 35px;
     background: transparent;
     z-index: 10;
     cursor: pointer;
@@ -210,50 +218,60 @@ body {
    GBA (HORIZONTAL) LAYOUT - DESKTOP
    ======================================== */
 
+.button-zones .up,
+.button-zones .down,
+.button-zones .left,
+.button-zones .right{
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+}
+
+/* Measured from the transparent cutout in gba_trimmed.png (1254x1254 canvas) */
 .gameboy-container[data-console="gba"] .screen {
-    top: 358px;
-    left: 289px;
-    width: 446px;
-    height: 266px;
+    top: 436px;
+    left: 353px;
+    width: 546px;
+    height: 327px;
 }
 
 .gameboy-container[data-console="gba"] .button-zones .up {
-    top: 411px;
-    left: 134px;
+    top: 503px;
+    left: 162.6px;
 }
 
 .gameboy-container[data-console="gba"] .button-zones .down {
-    top: 490px;
-    left: 134px;
+    top: 599px;
+    left: 162px;
 }
 
 .gameboy-container[data-console="gba"] .button-zones .right {
-    top: 451px;
-    left: 176px;
+    top: 550px;
+    left: 211px;
 }
 
 .gameboy-container[data-console="gba"] .button-zones .left {
-    top: 451px;
-    left: 92px;
+    top: 550px;
+    left: 112px;
 }
 
 .gameboy-container[data-console="gba"] .button-zones .a {
-    top: 414.5px;
-    left: 892px;
-    width: 55px;
-    height: 55px;
+    top: 504px;
+    left: 1089px;
+    width: 73px;
+    height: 73px;
 }
 
 .gameboy-container[data-console="gba"] .button-zones .b {
-    top: 444.5px;
-    left: 806.5px;
-    width: 55px;
-    height: 55px;
+    top: 541px;
+    left: 985px;
+    width: 73px;
+    height: 73px;
 }
 
 .gameboy-container[data-console="gba"] .gameboy-title {
-    top: 650px;
-    font-size: 32px;
+    top: 800px;
+    font-size: 40px;
 }
 
 
@@ -262,7 +280,6 @@ body {
    ======================================== */
 
 .gameboy-container[data-console="gbasp"] .screen {
-    /* TODO: Measure these from your GBASP image */
     top: 70px;
     left: 294px;
     width: 218px;
@@ -270,31 +287,26 @@ body {
 }
 
 .gameboy-container[data-console="gbasp"] .button-zones .up {
-    /* TODO: Measure these from your GBASP image */
     top: 383px;
     left: 315px;
 }
 
 .gameboy-container[data-console="gbasp"] .button-zones .down {
-    /* TODO: Measure these from your GBASP image */
     top: 425px;
     left: 315px;
 }
 
 .gameboy-container[data-console="gbasp"] .button-zones .right {
-    /* TODO: Measure these from your GBASP image */
     top: 405px;
     left: 337px;
 }
 
 .gameboy-container[data-console="gbasp"] .button-zones .left {
-    /* TODO: Measure these from your GBASP image */
     top: 405px;
     left: 292px;
 }
 
 .gameboy-container[data-console="gbasp"] .button-zones .a {
-    /* TODO: Measure these from your GBASP image */
     top: 393px;
     left: 483px;
     width: 30px;
@@ -302,12 +314,39 @@ body {
 }
 
 .gameboy-container[data-console="gbasp"] .button-zones .b {
-    /* TODO: Measure these from your GBASP image */
     top: 406px;
     left: 435px;
     width: 30px;
     height: 30px;
 }
+
+
+/* TODO: calibrate these against the current gba.png */
+.gameboy-container[data-console="gba"] .button-zones .select {
+    top: 708px;
+    left: 237.4px;
+}
+
+.gameboy-container[data-console="gba"] .button-zones .start {
+    top: 770px;
+    left: 238px;
+}
+
+/* TODO: calibrate these against the current gbasp.png */
+.gameboy-container[data-console="gbasp"] .button-zones .select {
+    top: 470px;
+    left: 300px;
+    width: 24px;
+    height: 10px;
+}
+
+.gameboy-container[data-console="gbasp"] .button-zones .start {
+    top: 470px;
+    left: 340px;
+    width: 24px;
+    height: 10px;
+}
+
 
 .gameboy-container[data-console="gbasp"] .gameboy-title {
     top: 231px;
@@ -637,6 +676,7 @@ body {
     touch-action: manipulation;
 }
 
+.menu-item.info,
 .menu-item.cart-total,
 .menu-item.cart-empty,
 .menu-item.gallery-title,
@@ -644,10 +684,7 @@ body {
 .menu-item.gallery-price,
 .menu-item.cart-item-title,
 .menu-item.cart-item-image,
-.menu-item.cart-item-price,
-.menu-item.creator-bio,
-.menu-item.contact-bio,
-.menu-item.sleepy-bio {
+.menu-item.cart-item-price {
     cursor: default;
     -webkit-tap-highlight-color: transparent;
     pointer-events: none;
@@ -705,20 +742,142 @@ body {
     }
 }
 
-/* Mobile landscape mode — rotates the entire page 90° when GBA is selected on a portrait phone */
-@media (max-width: 768px) {
-    body.landscape-mode {
-        width: 100vh;
-        height: 100vw;
-        transform: rotate(90deg);
-        transform-origin: top left;
-        position: fixed;
-        top: 0;
-        left: 100vw;
-        overflow: hidden;
-    }
+/* ========================================
+   MOBILE ORIENTATION
+   The console follows the phone's real orientation: portrait shows the SP,
+   landscape shows the GBA. There is no page rotation any more - a transform on
+   an ancestor forces every descendant into grayscale antialiasing, which is what
+   made the menu text look blurry.
+   ======================================== */
 
-    body.landscape-mode .controls-legend {
+/* Prompt shown in portrait to explain the landscape layout exists */
+.rotate-hint {
+    display: none;
+    position: fixed;
+    left: 50%;
+    bottom: 76px;
+    transform: translateX(-50%);
+    z-index: 900;
+    background: #222;
+    color: #b2f2bb;
+    border: 2px solid #b2f2bb;
+    padding: 8px 16px;
+    font-family: monospace;
+    font-size: 12px;
+    text-align: center;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+}
+
+@media (max-width: 900px) and (orientation: portrait) {
+    .rotate-hint { display: block; }
+}
+
+/* Landscape phones need the chrome out of the way - the console fills the screen */
+@media (max-width: 900px) and (orientation: landscape) {
+    .controls-legend { display: none; }
+    .gameboy-title { display: none; }
+
+    .chat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
         bottom: 10px;
+        right: 10px;
     }
+}
+
+/* ========================================
+   EASTER EGGS
+   ======================================== */
+
+/* Recolored shells - hue-rotate keeps the shading intact, so one PNG covers them all */
+.gameboy-container.shell-indigo .shell { filter: hue-rotate(210deg) saturate(1.15); }
+.gameboy-container.shell-berry  .shell { filter: hue-rotate(300deg) saturate(1.2); }
+.gameboy-container.shell-lime   .shell { filter: hue-rotate(75deg)  saturate(1.25); }
+.gameboy-container.shell-ice    .shell { filter: hue-rotate(160deg) saturate(0.6) brightness(1.1); }
+
+.gameboy-container.rare-shell .shell {
+    filter: hue-rotate(280deg) saturate(1.6) contrast(1.05);
+    animation: rare-shimmer 4s ease-in-out infinite;
+}
+
+@keyframes rare-shimmer {
+    0%, 100% { filter: hue-rotate(280deg) saturate(1.6) contrast(1.05); }
+    50%      { filter: hue-rotate(320deg) saturate(1.9) contrast(1.1); }
+}
+
+.konami-banner {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    background: #222;
+    color: #b2f2bb;
+    border: 2px solid #b2f2bb;
+    padding: 10px 22px;
+    font-family: 'GameboyFont', monospace;
+    font-size: 16px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+    animation: konami-pop 0.25s ease-out;
+}
+
+@keyframes konami-pop {
+    from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (max-width: 900px) {
+    .konami-banner {
+        font-size: 13px;
+        padding: 8px 16px;
+    }
+}
+
+/* ========================================
+   CALIBRATION MODE  -  add ?calibrate=1 to the URL
+   ======================================== */
+
+/* Outlines every hit zone and lets clicks fall through to the shell so the
+   coordinate readout can report where you actually clicked. */
+body.calibrate .button-zones .btn {
+    outline: 2px solid #ff2d55;
+    background: rgba(255, 45, 85, 0.28);
+    pointer-events: none;
+}
+
+body.calibrate .screen {
+    outline: 2px solid #00e5ff;
+    pointer-events: none;
+}
+
+/* Name each zone just outside its box */
+body.calibrate .button-zones .btn::after {
+    content: attr(class);
+    position: absolute;
+    top: 100%;
+    left: 0;
+    font: bold 9px monospace;
+    color: #ff2d55;
+    background: rgba(0, 0, 0, 0.75);
+    padding: 1px 3px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.calibrate-readout {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 3000;
+    background: rgba(0, 0, 0, 0.88);
+    color: #b2f2bb;
+    border: 1px solid #b2f2bb;
+    padding: 8px 12px;
+    font: 12px/1.5 monospace;
+    white-space: pre;
+    pointer-events: none;
 }

@@ -1,0 +1,134 @@
+{% extends "public_base.html" %}
+
+{% block title %}{{ item.title }} | Gameboy Retreat{% endblock %}
+{% block og_title %}{{ item.title }} &mdash; ${{ '%.2f'|format(item.price) }}{% endblock %}
+{% block og_type %}product{% endblock %}
+{% block description %}{{ item.description[:155] if item.description else item.title ~ ' - professionally refurbished and tested.' }}{% endblock %}
+{% block og_description %}{{ item.description[:155] if item.description else item.title }}{% endblock %}
+
+{% block og_image_tag %}
+{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
+{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{{ structured_data|safe }}
+</script>
+{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+    <a href="/shop">Shop</a> <span>/</span>
+    <a href="/shop#{{ item.category }}">{{ category_name }}</a> <span>/</span>
+    <span aria-current="page">{{ item.title }}</span>
+</nav>
+
+<article class="listing-detail">
+    <div class="listing-gallery">
+        {% if item.images %}
+            <img class="gallery-main" id="gallery-main"
+                 src="{{ item.images[0] }}" alt="{{ item.title }}">
+            {% if item.images|length > 1 %}
+            <ul class="gallery-thumbs">
+                {% for img in item.images %}
+                <li>
+                    <button type="button" data-full="{{ img }}"
+                            class="{{ 'active' if loop.first else '' }}">
+                        <img src="{{ img }}" alt="{{ item.title }} photo {{ loop.index }}"
+                             loading="lazy">
+                    </button>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        {% else %}
+            <div class="card-media-empty large">No photo yet</div>
+        {% endif %}
+    </div>
+
+    <div class="listing-info">
+        <p class="eyebrow">{{ category_name }}</p>
+        <h1>{{ item.title }}</h1>
+
+        <p class="listing-price">${{ '%.2f'|format(item.price) }}</p>
+
+        <p class="listing-stock {{ 'in-stock' if item.in_stock else 'out-of-stock' }}">
+            {% if item.in_stock %}
+                Available &mdash; {{ item.stock }} in stock
+            {% else %}
+                Sold out
+            {% endif %}
+        </p>
+
+        {% if item.description %}
+        <div class="listing-description">
+            <p>{{ item.description }}</p>
+        </div>
+        {% endif %}
+
+        {% if item.in_stock %}
+            <a class="buy-button" href="/?listing={{ item.slug }}">
+                View in the console &rarr;
+            </a>
+            <p class="buy-note">
+                Checkout runs through the Game Boy interface. Secure payment via Stripe.
+            </p>
+        {% else %}
+            <p class="buy-note">
+                This one has found a home. <a href="/shop">See what else is available</a>
+                or <a href="mailto:t.bryan.dev@gmail.com">ask us to source one</a>.
+            </p>
+        {% endif %}
+
+        <dl class="listing-specs">
+            <dt>Condition</dt>
+            <dd>Refurbished &mdash; cleaned, rehoused, faults repaired, fully tested</dd>
+            <dt>Returns</dt>
+            <dd>30 days if faulty or not as described</dd>
+            <dt>Ships from</dt>
+            <dd>Stockton, CA</dd>
+        </dl>
+    </div>
+</article>
+
+{% if related %}
+<section class="related">
+    <h2>More {{ category_name }}</h2>
+    <ul class="listing-grid">
+        {% for other in related %}
+        <li class="listing-card {{ 'is-sold' if not other.in_stock else '' }}">
+            <a href="/listing/{{ other.slug }}">
+                <div class="card-media">
+                    {% if other.images %}
+                        <img src="{{ other.images[0] }}" alt="{{ other.title }}" loading="lazy">
+                    {% else %}
+                        <div class="card-media-empty">No photo</div>
+                    {% endif %}
+                    <span class="stock-badge">
+                        {{ 'SOLD OUT' if not other.in_stock else 'AVAILABLE' }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <h3>{{ other.title }}</h3>
+                    <p class="card-price">${{ '%.2f'|format(other.price) }}</p>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<script>
+    // Thumbnail switching. Progressive enhancement only - the main image is
+    // already in the HTML, so this page works fine with JavaScript disabled.
+    document.querySelectorAll('.gallery-thumbs button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('gallery-main').src = btn.dataset.full;
+            document.querySelectorAll('.gallery-thumbs button')
+                .forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+        });
+    });
+</script>
+{% endblock %}

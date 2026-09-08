@@ -1,0 +1,52 @@
+{% extends "public_base.html" %}
+
+{% block title %}Shop Refurbished Handhelds | Gameboy Retreat{% endblock %}
+{% block og_title %}Shop Refurbished Handhelds{% endblock %}
+{% block description %}Browse {{ total }} professionally refurbished Game Boy, Game Boy Advance and Nintendo DS handhelds. Cleaned, rehoused and restored by hand.{% endblock %}
+{% block og_description %}Browse professionally refurbished retro handhelds, restored by hand.{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+    <h1>Shop</h1>
+    <p>
+        {{ total }} console{{ '' if total == 1 else 's' }} restored by hand. Each one is
+        cleaned, rehoused and repaired until it works like new.
+    </p>
+</div>
+
+{% if not categories %}
+    <p class="empty-state">
+        Nothing listed right now. New restorations go up regularly &mdash;
+        <a href="mailto:t.bryan.dev@gmail.com">email us</a> if you are after something specific.
+    </p>
+{% endif %}
+
+{% for category in categories %}
+<section class="category-block" id="{{ category.slug }}">
+    <h2>{{ category.label }}</h2>
+
+    <ul class="listing-grid">
+        {% for item in category.products %}
+        <li class="listing-card {{ 'is-sold' if not item.in_stock else '' }}">
+            <a href="/listing/{{ item.slug }}">
+                <div class="card-media">
+                    {% if item.images %}
+                        <img src="{{ item.images[0] }}" alt="{{ item.title }}" loading="lazy">
+                    {% else %}
+                        <div class="card-media-empty">No photo</div>
+                    {% endif %}
+                    <span class="stock-badge">
+                        {{ 'SOLD OUT' if not item.in_stock else 'AVAILABLE' }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <h3>{{ item.title }}</h3>
+                    <p class="card-price">${{ '%.2f'|format(item.price) }}</p>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endfor %}
+{% endblock %}

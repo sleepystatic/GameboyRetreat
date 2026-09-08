@@ -1,0 +1,300 @@
+/* ============================================================
+   Public crawlable pages - /shop and /listing/<slug>
+   Deliberately separate from style.css, which owns the Game Boy UI.
+   Same palette so the two halves feel like one site.
+   ============================================================ */
+
+:root {
+    --ink: #0a0a0a;
+    --panel: #161616;
+    --panel-2: #1e1e1e;
+    --line: #333;
+    --green: #b2f2bb;
+    --green-dim: #6dbb7a;
+    --text: #e8e8e8;
+    --muted: #9a9a9a;
+    --red: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--green); }
+
+img { max-width: 100%; display: block; }
+
+@font-face {
+    font-family: 'GameboyFont';
+    src: url('/static/fonts/pixel-font.ttf') format('truetype');
+    font-display: swap;
+}
+
+/* ---------- header / footer ---------- */
+
+.site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 18px 24px;
+    border-bottom: 2px solid var(--line);
+    background: var(--panel);
+}
+
+.brand {
+    font-family: 'GameboyFont', monospace;
+    font-size: 22px;
+    letter-spacing: 1px;
+    color: var(--green);
+    text-decoration: none;
+}
+
+.site-nav { display: flex; gap: 20px; }
+.site-nav a { text-decoration: none; font-size: 14px; }
+.site-nav a:hover { text-decoration: underline; }
+
+.site-main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+}
+
+.site-footer {
+    border-top: 2px solid var(--line);
+    background: var(--panel);
+    padding: 32px 24px;
+}
+
+.footer-cols {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    gap: 28px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.footer-cols h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--green);
+    margin: 0 0 8px;
+}
+
+.footer-cols p { margin: 0; font-size: 13px; color: var(--muted); }
+
+.footer-legal {
+    max-width: 1100px;
+    margin: 28px auto 0;
+    font-size: 12px;
+    color: #666;
+}
+
+/* ---------- shop index ---------- */
+
+.page-intro { margin-bottom: 36px; }
+
+.page-intro h1 {
+    font-family: 'GameboyFont', monospace;
+    font-size: 34px;
+    color: var(--green);
+    margin: 0 0 8px;
+}
+
+.page-intro p { margin: 0; color: var(--muted); max-width: 60ch; }
+
+.empty-state { color: var(--muted); }
+
+.category-block { margin-bottom: 48px; scroll-margin-top: 20px; }
+
+.category-block h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--green);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+    margin: 0 0 20px;
+}
+
+.listing-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.listing-card {
+    background: var(--panel);
+    border: 2px solid var(--line);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.listing-card:hover { border-color: var(--green); transform: translateY(-2px); }
+.listing-card a { text-decoration: none; color: inherit; display: block; }
+
+.card-media {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: var(--panel-2);
+    overflow: hidden;
+}
+
+.card-media img { width: 100%; height: 100%; object-fit: contain; }
+
+.card-media-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #555;
+    font-size: 12px;
+}
+
+.card-media-empty.large { aspect-ratio: 4 / 3; border: 2px solid var(--line); }
+
+.stock-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 3px 7px;
+    background: var(--green);
+    color: #0a0a0a;
+    font-weight: bold;
+}
+
+.is-sold .stock-badge { background: var(--red); color: #fff; }
+.is-sold .card-media img { opacity: 0.45; filter: grayscale(0.7); }
+
+.card-body { padding: 12px 14px 14px; }
+.card-body h3 { margin: 0 0 4px; font-size: 14px; font-weight: normal; }
+.card-price { margin: 0; color: var(--green); font-size: 16px; font-weight: bold; }
+
+/* ---------- listing detail ---------- */
+
+.breadcrumb { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
+.breadcrumb a { text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb span { margin: 0 6px; }
+
+.listing-detail {
+    display: grid;
+    gap: 36px;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: start;
+}
+
+@media (max-width: 780px) {
+    .listing-detail { grid-template-columns: 1fr; }
+}
+
+.gallery-main {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: contain;
+    background: var(--panel-2);
+    border: 2px solid var(--line);
+}
+
+.gallery-thumbs {
+    list-style: none;
+    display: flex;
+    gap: 8px;
+    padding: 0;
+    margin: 10px 0 0;
+    flex-wrap: wrap;
+}
+
+.gallery-thumbs button {
+    padding: 0;
+    width: 68px;
+    height: 52px;
+    background: var(--panel-2);
+    border: 2px solid var(--line);
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.gallery-thumbs button.active { border-color: var(--green); }
+.gallery-thumbs button img { width: 100%; height: 100%; object-fit: contain; }
+
+.eyebrow {
+    margin: 0 0 6px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--green-dim);
+}
+
+.listing-info h1 {
+    font-family: 'GameboyFont', monospace;
+    font-size: 28px;
+    color: var(--green);
+    margin: 0 0 14px;
+    line-height: 1.25;
+}
+
+.listing-price { font-size: 26px; font-weight: bold; margin: 0 0 6px; }
+
+.listing-stock { margin: 0 0 20px; font-size: 13px; }
+.listing-stock.in-stock { color: var(--green); }
+.listing-stock.out-of-stock { color: var(--red); }
+
+.listing-description { color: var(--muted); margin-bottom: 24px; }
+.listing-description p { margin: 0; }
+
+.buy-button {
+    display: inline-block;
+    background: var(--green);
+    color: #0a0a0a;
+    font-weight: bold;
+    text-decoration: none;
+    padding: 13px 24px;
+    border: 2px solid var(--green);
+}
+
+.buy-button:hover { background: #51cf66; border-color: #51cf66; }
+
+.buy-note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+
+.listing-specs {
+    margin: 28px 0 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+}
+
+.listing-specs dt {
+    color: var(--green-dim);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-top: 12px;
+}
+
+.listing-specs dd { margin: 3px 0 0; color: var(--muted); }
+
+.related { margin-top: 56px; }
+
+.related h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--green);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+    margin: 0 0 20px;
+}

@@ -1,76 +1,91 @@
-// Device-specific console detection - SIMPLIFIED
-(function() {
-    function selectConsoleLayout() {
-        const gameboyContainer = document.querySelector('.gameboy-container');
-        const shellImage = gameboyContainer.querySelector('.shell');
-        const screenWidth = window.innerWidth;
+// Look up a shell image path from the container's data-shell-* attributes so the
+// filenames live in the template only. Falls back to the old convention if the
+// attribute is missing.
+function shellSrcFor(container, layout) {
+    return container.getAttribute(`data-shell-${layout}`) || `/static/${layout}.png`;
+}
 
-        if (screenWidth <= 768) {
-            // Mobile - SP
-            shellImage.src = '/static/gbasp.png';
-            gameboyContainer.setAttribute('data-console', 'gbasp');
-            document.body.classList.remove('landscape-mode');
-            console.log('Set to GBASP');
-        } else {
-            // Desktop - GBA
-            shellImage.src = '/static/gba.png';
-            gameboyContainer.setAttribute('data-console', 'gba');
-            document.body.classList.remove('landscape-mode');
-            console.log('Set to GBA');
-        }
+// A phone is anything narrow in its *portrait* dimension, so the check has to look
+// at the shorter edge rather than innerWidth - in landscape innerWidth is the long one.
+function isHandheld() {
+    return Math.min(window.innerWidth, window.innerHeight) <= 500
+        || window.matchMedia('(max-width: 900px)').matches;
+}
+
+function isLandscape() {
+    return window.innerWidth > window.innerHeight;
+}
+
+// Applies a console layout without touching menu state.
+function setConsoleLayout(layout) {
+    const container = document.querySelector('.gameboy-container');
+    if (!container) return;
+    if (container.getAttribute('data-console') === layout) return;
+
+    container.querySelector('.shell').src = shellSrcFor(container, layout);
+    container.setAttribute('data-console', layout);
+}
+
+// On a phone the console follows the device orientation - portrait is the SP,
+// landscape is the GBA. Desktop stays on the GBA and switches via the menu.
+(function() {
+    function syncConsoleToDevice() {
+        if (!isHandheld()) return;
+        setConsoleLayout(isLandscape() ? 'gba' : 'gbasp');
     }
 
-    window.addEventListener('DOMContentLoaded', selectConsoleLayout);
-    window.addEventListener('resize', selectConsoleLayout);
+    window.addEventListener('DOMContentLoaded', syncConsoleToDevice);
+    window.addEventListener('resize', syncConsoleToDevice);
+    window.addEventListener('orientationchange', syncConsoleToDevice);
 })();
 
 // Mobile scaling - apply immediately based on screen width and console type
 (function() {
+    // Visible shell size inside the image's transparent padding. Scaling against the
+    // raw image size would be far too conservative - the GBA artwork is only 633px
+    // tall inside a 1254px square.
+    function contentSize(container, layout) {
+        const raw = container.getAttribute(`data-content-${layout}`);
+        if (!raw) return null;
+        const [w, h] = raw.trim().split(/\s+/).map(Number);
+        return (w && h) ? { w, h } : null;
+    }
+
     function applyMobileScale() {
         const container = document.querySelector('.gameboy-container');
         if (!container) return;
 
-        const screenWidth = window.innerWidth;
-        const consoleType = container.getAttribute('data-console');
-        let scale;
+        // Breathing room so the shell never kisses the edge of the viewport
+        const MARGIN = 0.94;
 
-        // Different scaling for different consoles on mobile
-        if (screenWidth <= 768) {
-            // Mobile devices
-            const isLandscapeMode = document.body.classList.contains('landscape-mode');
-            if (consoleType === 'gba' && isLandscapeMode) {
-                // Landscape-rotated GBA uses the phone's height as width
-                const availableWidth = window.innerHeight;
-                scale = Math.min(availableWidth / 1024, 0.75);
-            } else if (consoleType === 'gba') {
-                // Horizontal GBA needs to be smaller to fit
-                if (screenWidth <= 400) {
-                    scale = 0.5;
-                } else if (screenWidth <= 480) {
-                    scale = 0.5;
-                } else {
-                    scale = 0.7;
-                }
-            } else {
-                // Vertical GBASP can be bigger
-                if (screenWidth <= 400) {
-                    scale = 1.0;
-                } else if (screenWidth <= 480) {
-                    scale = 1.0;
-                } else {
-                    scale = 1.2;
-                }
-            }
-        } else {
-            // Desktop - normal size
-            scale = 1.0;
+        const consoleType = container.getAttribute('data-console');
+
+        if (!isHandheld()) {
+            container.style.zoom = '';
+            container.style.transform = '';
+            return;
         }
 
-        container.style.transform = `scale(${scale})`;
+        const content = contentSize(container, consoleType);
+        if (!content) return;
+
+        // No page rotation any more, so the axes are the real ones.
+        const scale = Math.min(
+            window.innerWidth / content.w,
+            window.innerHeight / content.h
+        ) * MARGIN;
+
+        // `zoom` rather than `transform: scale()`. transform resamples pixels that
+        // have already been rendered and, worse, puts the whole subtree into
+        // grayscale antialiasing - both of which blur the small menu text. `zoom`
+        // scales at layout time so glyphs rasterize at their final size.
+        container.style.transform = '';
+        container.style.zoom = scale;
     }
 
     window.addEventListener('DOMContentLoaded', applyMobileScale);
     window.addEventListener('resize', applyMobileScale);
+    window.addEventListener('orientationchange', applyMobileScale);
 
     // Also reapply when console switches
     const observer = new MutationObserver(applyMobileScale);
@@ -80,6 +95,118 @@
     }
 })();
 
+// ============================================
+// MENU DEFINITIONS
+// ============================================
+// Every static menu lives here, so adding a screen is one entry rather than an
+// edit to index.html plus a new `case` in a switch that fails silently when you
+// forget it. Menus built at runtime (cart, gallery, category listings) stay in
+// code because their contents depend on data.
+//
+//   label  - what the player sees
+//   action - key into ACTIONS; unknown keys warn instead of doing nothing
+//   info   - true for read-only text: not selectable, not highlightable
+const MENUS = {
+    'main-menu': [
+        { label: 'Shop', action: 'menu:shop-menu' },
+        { label: 'Cart', action: 'cart' },
+        { label: 'Sell To Us', action: 'sell' },
+        { label: 'About', action: 'menu:about-menu' },
+        { label: 'Switch Console', action: 'switchConsole', desktopOnly: true },
+    ],
+    'shop-menu': [
+        { label: 'Back', action: 'menu:main-menu' },
+        { label: 'Gameboy Color', action: 'category:gameboy-color' },
+        { label: 'Gameboy Advance', action: 'category:gameboy-advance' },
+        { label: 'Gameboy Advance SP', action: 'category:gameboy-advance-sp' },
+        { label: 'Nintendo DS Lite', action: 'category:nintendo-ds-lite' },
+    ],
+    'about-menu': [
+        { label: 'Back', action: 'menu:main-menu' },
+        { label: 'Creator', action: 'menu:creator-menu' },
+        { label: 'Contact', action: 'menu:contact-menu' },
+        { label: 'Static Designs', action: 'external:https://staticdesigns.dev/' },
+        { label: 'Privacy Policy', action: 'menu:privacy-menu' },
+    ],
+    'creator-menu': [
+        { label: 'A private platform to purchase professionally refurbished handhelds and other games!', info: true },
+        { label: 'Back', action: 'menu:about-menu' },
+    ],
+    'contact-menu': [
+        { label: 'Email: t.bryan.dev@gmail.com', info: true },
+        { label: 'Location: Stockton, CA', info: true },
+        { label: 'Chat: Use the chat bot in the corner!', info: true },
+        { label: 'Response Time: Within 24 hours', info: true },
+        { label: 'Back', action: 'menu:about-menu' },
+    ],
+    'privacy-menu': [
+        { label: 'We collect minimal information: your email when you submit items to sell, '
+               + 'and shipping info during checkout (processed securely by Stripe). We never '
+               + 'sell your data. Emails are used only to respond to your inquiries. By using '
+               + 'this site, you agree to these terms. Questions? Contact us at '
+               + 't.bryan.dev@gmail.com', info: true },
+        { label: 'Back', action: 'menu:about-menu' },
+    ],
+    'sell-menu': [
+        { label: 'Got a console to sell? Tell us about it and we will make an offer.', info: true },
+        { label: 'Start Submission', action: 'openSellChat' },
+        { label: 'Back', action: 'menu:main-menu' },
+    ],
+};
+
+// Menus whose contents are generated at runtime - rendered by their own functions.
+const DYNAMIC_MENUS = ['cart-menu', 'gallery-menu', 'category-listings-menu'];
+
+// A single source of truth for "the cursor cannot land here". Replaces the three
+// copies of this list that had already drifted apart.
+const NON_SELECTABLE = [
+    'info', 'cart-total', 'cart-empty', 'out-of-stock',
+    'gallery-title', 'gallery-description', 'gallery-price',
+    'cart-item-title', 'cart-item-image', 'cart-item-price',
+];
+
+function isSelectable(el) {
+    return !!el && !NON_SELECTABLE.some(c => el.classList.contains(c));
+}
+
+// Index of the first row the cursor may occupy, or 0 if a menu is all text.
+function firstSelectableIndex(items) {
+    for (let i = 0; i < items.length; i++) {
+        if (isSelectable(items[i])) return i;
+    }
+    return 0;
+}
+
+// Build the static menus into the screen from MENUS.
+function renderMenus() {
+    const screen = document.querySelector('.screen');
+    if (!screen) return;
+
+    const desktop = !isHandheld();
+    const html = [];
+
+    Object.entries(MENUS).forEach(([id, items], menuIndex) => {
+        const classes = menuIndex === 0 ? 'menu active-menu' : 'menu hidden';
+        html.push(`<ul class="${classes}" id="${id}">`);
+
+        items
+            .filter(item => !(item.desktopOnly && !desktop))
+            .forEach(item => {
+                const cls = item.info ? 'menu-item info' : 'menu-item';
+                const action = item.action ? ` data-action="${item.action}"` : '';
+                html.push(`<li class="${cls}"${action}>${item.label}</li>`);
+            });
+
+        html.push('</ul>');
+    });
+
+    DYNAMIC_MENUS.forEach(id => {
+        html.push(`<ul class="menu hidden" id="${id}"></ul>`);
+    });
+
+    screen.innerHTML = html.join('');
+}
+
 // Load inventory from database
 let listings = {}; // Start empty
 
@@ -87,6 +214,11 @@ async function loadInventory() {
     try {
         const response = await fetch('/api/stock');
         const data = await response.json();
+        // A failing /api/stock still returns valid JSON, so an unchecked assignment
+        // here leaves `listings` as an error object and the shop menu silently dead.
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
         listings = data;
         console.log('✅ Inventory loaded from database:', listings);
     } catch (error) {
@@ -141,6 +273,9 @@ async function loadInventory() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Build the static menus from MENUS before anything queries the DOM for them.
+    renderMenus();
+
     // Load inventory FIRST before allowing interaction
     await loadInventory();
 
@@ -185,7 +320,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         menuItems = currentMenu.querySelectorAll('.menu-item');
 
-        currentIndex = 0;
+        // Start on the first row the cursor is allowed to occupy - menus that open
+        // with a paragraph of text would otherwise highlight the paragraph.
+        currentIndex = firstSelectableIndex(menuItems);
         updateActivate(currentIndex);
     }
 
@@ -329,11 +466,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (cart.length === 0) {
             currentMenu.innerHTML = `
-                <li class="menu-item active">Back</li>
+                <li class="menu-item active" data-action="back">Back</li>
                 <li class="menu-item cart-empty">Cart is Empty</li>
             `;
         } else {
-            let cartHTML = '<li class="menu-item">Back</li>';
+            let cartHTML = '<li class="menu-item" data-action="back">Back</li>';
             let total = 0;
 
             cart.forEach((item, index) => {
@@ -342,8 +479,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
             cartHTML += `<li class="menu-item cart-total">Total: $${total}</li>`;
-            cartHTML += `<li class="menu-item">Checkout</li>`;
-            cartHTML += `<li class="menu-item">Clear Cart</li>`;
+            cartHTML += `<li class="menu-item" data-action="checkout">Checkout</li>`;
+            cartHTML += `<li class="menu-item" data-action="clearCart">Clear Cart</li>`;
             currentMenu.innerHTML = cartHTML;
         }
 
@@ -361,9 +498,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <img src="${item.img}" alt="${item.title}" class="product-image">
             </li>
             <li class="menu-item cart-item-price">Price: $${item.price}</li>
-            <li class="menu-item active">View Listing</li>
-            <li class="menu-item">Remove Item</li>
-            <li class="menu-item">Back to Cart</li>
+            <li class="menu-item active" data-action="viewListing">View Listing</li>
+            <li class="menu-item" data-action="removeCartItem">Remove Item</li>
+            <li class="menu-item" data-action="backToCart">Back to Cart</li>
         `;
 
         currentMenu.setAttribute('data-viewing-cart-index', itemIndex);
@@ -436,122 +573,141 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    function handleSelect(text) {
-        switch (text) {
-            case 'switch console':
-                const gameboyContainer = document.querySelector('.gameboy-container');
-                const currentLayout = gameboyContainer.getAttribute('data-console');
-                const newLayout = currentLayout === 'gba' ? 'gbasp' : 'gba';
+    // Action table. Keys come from data-action on each menu item, so a typo shows
+    // up as a console warning instead of a button that silently does nothing.
+    const ACTIONS = {
+        switchConsole() {
+            // Desktop only - on a phone the orientation drives this.
+            const container = document.querySelector('.gameboy-container');
+            const next = container.getAttribute('data-console') === 'gba' ? 'gbasp' : 'gba';
+            setConsoleLayout(next);
+            switchMenu('main-menu');
+        },
 
-                const shellImage = gameboyContainer.querySelector('.shell');
-                shellImage.src = `/static/${newLayout}.png`;
-                gameboyContainer.setAttribute('data-console', newLayout);
+        cart() { renderCart(); },
 
-                const isMobile = window.innerWidth <= 768;
-                if (isMobile && newLayout === 'gba') {
-                    document.body.classList.add('landscape-mode');
-                    try { screen.orientation.lock('portrait').catch(() => {}); } catch(e) {}
-                } else {
-                    document.body.classList.remove('landscape-mode');
-                    try { screen.orientation.unlock(); } catch(e) {}
-                }
+        sell() { switchMenu('sell-menu'); },
 
-                switchMenu('main-menu');
-                break;
+        openSellChat() {
+            const box = document.getElementById('chat-box');
+            const input = document.getElementById('chat-input');
+            if (box) box.classList.remove('hidden');
+            if (input) input.focus();
+        },
 
-            case 'home':
-                switchMenu('main-menu');
-                break;
-            case 'shop':
+        checkout() { handleCheckout(); },
+
+        addToCart() {
+            if (inGallery && currentGalleryItems[currentGalleryIndex]) {
+                addToCart(currentGalleryItems[currentGalleryIndex]);
+            }
+        },
+
+        clearCart() {
+            if (confirm('Clear all items from cart?')) {
+                cart = [];
+                localStorage.setItem('gameboyCart', JSON.stringify(cart));
+                renderCart();
+            }
+        },
+
+        backToCart() {
+            currentMenu.removeAttribute('data-viewing-cart-index');
+            renderCart();
+        },
+
+        removeCartItem() {
+            const i = parseInt(currentMenu.getAttribute('data-viewing-cart-index'));
+            if (!isNaN(i)) {
+                cart.splice(i, 1);
+                localStorage.setItem('gameboyCart', JSON.stringify(cart));
+                currentMenu.removeAttribute('data-viewing-cart-index');
+                renderCart();
+            }
+        },
+
+        viewListing() {
+            const i = parseInt(currentMenu.getAttribute('data-viewing-cart-index'));
+            if (isNaN(i) || !cart[i]) return;
+            const cartItem = cart[i];
+            const category = cartItem.category;
+            if (!listings[category]) return;
+
+            inGallery = true;
+            viewingFromCart = true;
+            currentGalleryItems = listings[category];
+            currentGalleryItems.forEach(item => item.category = category);
+            currentGalleryIndex = currentGalleryItems.findIndex(x => x.title === cartItem.title);
+            if (currentGalleryIndex === -1) currentGalleryIndex = 0;
+            currentImageIndex = 0;
+            renderGalleryItem();
+        },
+
+        back() {
+            if (inGallery) {
+                inGallery = false;
                 switchMenu('shop-menu');
-                break;
-            case 'cart':
-                renderCart();
-                break;
-            case 'about':
-                switchMenu('about-menu');
-                break;
-            case 'creator':
-                switchMenu('creator-menu');
-                break;
-            case 'sleepy static':
-                window.open('https://sleepystatic.com/', '_blank');
-                break;
-            case 'contact':
-                switchMenu('contact-menu');
-                break;
-            case 'privacy policy':
-                switchMenu('privacy-menu');
-                break;
-            case 'back':
-                if (inGallery) {
-                    inGallery = false;
-                    switchMenu('shop-menu');
-                } else if (currentMenu.id === 'category-listings-menu') {
-                    // Go back from category listings to shop menu
-                    switchMenu('shop-menu');
-                } else if (currentMenu.id === 'creator-menu' || currentMenu.id === 'contact-menu' || currentMenu.id === 'sleepystatic-menu') {
-                    switchMenu('about-menu');
-                } else {
-                    switchMenu('main-menu');
-                }
-                break;
-            case 'checkout':
-                handleCheckout();
-                break;
-            case 'clear cart':
-                const confirmClear = confirm('Clear all items from cart?');
-                if (confirmClear) {
-                    cart = [];
-                    localStorage.setItem('gameboyCart', JSON.stringify(cart));
-                    renderCart();
-                }
-                break;
-            case 'back to cart':
-                if (currentMenu.hasAttribute('data-viewing-cart-index')) {
-                    currentMenu.removeAttribute('data-viewing-cart-index');
-                }
-                renderCart();
-                break;
-            case 'remove item':
-                const indexToRemove = parseInt(currentMenu.getAttribute('data-viewing-cart-index'));
-                if (!isNaN(indexToRemove)) {
-                    cart.splice(indexToRemove, 1);
-                    localStorage.setItem('gameboyCart', JSON.stringify(cart));
-                    currentMenu.removeAttribute('data-viewing-cart-index');
-                    renderCart();
-                }
-                break;
-            case 'view listing':
-                const viewIndex = parseInt(currentMenu.getAttribute('data-viewing-cart-index'));
-                if (!isNaN(viewIndex) && cart[viewIndex]) {
-                    const cartItem = cart[viewIndex];
-                    const category = cartItem.category;
-                    if (listings[category]) {
-                        inGallery = true;
-                        viewingFromCart = true;
-                        currentGalleryItems = listings[category];
-                        currentGalleryItems.forEach(item => item.category = category);
-                        currentGalleryIndex = currentGalleryItems.findIndex(item => item.title === cartItem.title);
-                        if (currentGalleryIndex === -1) currentGalleryIndex = 0;
-                        currentImageIndex = 0;
-                        renderGalleryItem();
-                    }
-                }
-                break;
-            case 'add to cart':
-                if (inGallery && currentGalleryItems[currentGalleryIndex]) {
-                    const item = currentGalleryItems[currentGalleryIndex];
-                    addToCart(item);
-                }
-                break;
-            default:
-                const selectedElement = menuItems[currentIndex];
-                if (selectedElement && selectedElement.hasAttribute('data-cart-index')) {
-                    const cartIndex = parseInt(selectedElement.getAttribute('data-cart-index'));
-                    showCartItemDetail(cartIndex);
-                }
+            } else if (currentMenu.id === 'category-listings-menu') {
+                switchMenu('shop-menu');
+            } else {
+                switchMenu('main-menu');
+            }
+        },
+    };
+
+    // Dispatch one action string. Handles the prefixed forms (menu:, category:,
+    // external:) plus anything in ACTIONS.
+    function runAction(action) {
+        if (!action) return false;
+
+        if (action.startsWith('menu:')) {
+            switchMenu(action.slice(5));
+            return true;
         }
+        if (action.startsWith('category:')) {
+            const category = action.slice(9);
+            if (listings[category]) {
+                showCategoryListings(category, category);
+            } else {
+                console.warn(`No listings loaded for category "${category}"`);
+            }
+            return true;
+        }
+        if (action.startsWith('external:')) {
+            window.open(action.slice(9), '_blank', 'noopener');
+            return true;
+        }
+        if (typeof ACTIONS[action] === 'function') {
+            ACTIONS[action]();
+            return true;
+        }
+
+        console.warn(`Unknown menu action: "${action}"`);
+        return false;
+    }
+
+    // Runtime-generated rows (cart entries, category listings) carry data
+    // attributes instead of an action, so they are resolved here.
+    function handleGeneratedItem(el) {
+        if (!el) return false;
+
+        if (el.hasAttribute('data-cart-index')) {
+            showCartItemDetail(parseInt(el.getAttribute('data-cart-index')));
+            return true;
+        }
+
+        if (el.hasAttribute('data-listing-category') && el.hasAttribute('data-listing-index')) {
+            const category = el.getAttribute('data-listing-category');
+            inGallery = true;
+            currentGalleryItems = listings[category];
+            currentGalleryItems.forEach(item => item.category = category);
+            currentGalleryIndex = parseInt(el.getAttribute('data-listing-index'));
+            currentImageIndex = 0;
+            renderGalleryItem();
+            return true;
+        }
+
+        return false;
     }
 
     function handleKeyPress(key) {
@@ -624,80 +780,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
-        if (key === 'ArrowUp') {
+        if (key === 'ArrowUp' || key === 'ArrowDown') {
+            const step = key === 'ArrowUp' ? -1 : 1;
+
             if (currentMenu.hasAttribute('data-viewing-cart-index')) {
                 currentIndex = currentIndex === 3 ? 4 : 3;
                 updateActivate(currentIndex);
-            } else {
-                do {
-                    currentIndex = (currentIndex - 1 + menuItems.length) % menuItems.length;
-                } while (menuItems[currentIndex] && (
-                    menuItems[currentIndex].classList.contains('cart-total') ||
-                    menuItems[currentIndex].classList.contains('cart-empty') ||
-                    menuItems[currentIndex].classList.contains('gallery-title') ||
-                    menuItems[currentIndex].classList.contains('gallery-description') ||
-                    menuItems[currentIndex].classList.contains('gallery-price') ||
-                    menuItems[currentIndex].classList.contains('cart-item-title') ||
-                    menuItems[currentIndex].classList.contains('cart-item-image') ||
-                    menuItems[currentIndex].classList.contains('cart-item-price') ||
-                    menuItems[currentIndex].classList.contains('out-of-stock')
-                ));
-                updateActivate(currentIndex);
+                return;
             }
-        } else if (key === 'ArrowDown') {
-            if (currentMenu.hasAttribute('data-viewing-cart-index')) {
-                currentIndex = currentIndex === 3 ? 4 : 3;
-                updateActivate(currentIndex);
-            } else {
-                do {
-                    currentIndex = (currentIndex + 1) % menuItems.length;
-                } while (menuItems[currentIndex] && (
-                    menuItems[currentIndex].classList.contains('cart-total') ||
-                    menuItems[currentIndex].classList.contains('cart-empty') ||
-                    menuItems[currentIndex].classList.contains('gallery-title') ||
-                    menuItems[currentIndex].classList.contains('gallery-description') ||
-                    menuItems[currentIndex].classList.contains('gallery-price') ||
-                    menuItems[currentIndex].classList.contains('cart-item-title') ||
-                    menuItems[currentIndex].classList.contains('cart-item-image') ||
-                    menuItems[currentIndex].classList.contains('cart-item-price') ||
-                    menuItems[currentIndex].classList.contains('out-of-stock')
-                ));
-                updateActivate(currentIndex);
+
+            // Walk past anything unselectable. The guard stops an infinite loop if
+            // a menu somehow contains nothing selectable at all.
+            const count = menuItems.length;
+            for (let hops = 0; hops < count; hops++) {
+                currentIndex = (currentIndex + step + count) % count;
+                if (isSelectable(menuItems[currentIndex])) break;
             }
+            updateActivate(currentIndex);
+
         } else if (key === 'Enter') {
-            const selectedText = menuItems[currentIndex].textContent.trim().toLowerCase();
-
-            const categoryMap = {
-                'gameboy color': 'gameboy-color',
-                'gameboy advance': 'gameboy-advance',
-                'gameboy advance sp': 'gameboy-advance-sp',
-                'nintendo ds lite': 'nintendo-ds-lite'
-            };
-
-            if (categoryMap[selectedText] && listings[categoryMap[selectedText]]) {
-                showCategoryListings(categoryMap[selectedText], selectedText);
-                return;
-            }
-
-            // Handle selecting an item from category listings menu
             const selectedElement = menuItems[currentIndex];
-            if (currentMenu.id === 'category-listings-menu' &&
-                selectedElement.hasAttribute('data-listing-category') &&
-                selectedElement.hasAttribute('data-listing-index')) {
+            if (!isSelectable(selectedElement)) return;
 
-                const category = selectedElement.getAttribute('data-listing-category');
-                const itemIndex = parseInt(selectedElement.getAttribute('data-listing-index'));
-
-                inGallery = true;
-                currentGalleryItems = listings[category];
-                currentGalleryItems.forEach(item => item.category = category);
-                currentGalleryIndex = itemIndex;
-                currentImageIndex = 0;
-                renderGalleryItem();
-                return;
+            // Static menus declare an action; generated rows carry data attributes.
+            if (!runAction(selectedElement.getAttribute('data-action'))) {
+                handleGeneratedItem(selectedElement);
             }
 
-            handleSelect(selectedText);
         } else if (key === 'Escape') {
             if (currentMenu.id !== 'main-menu') {
                 switchMenu('main-menu');
@@ -756,7 +865,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const items = listings[category];
 
-        let listingsHTML = `<li class="menu-item">Back</li>`;
+        let listingsHTML = `<li class="menu-item" data-action="back">Back</li>`;
 
         items.forEach((item, index) => {
             if (item.stock > 0) {
@@ -808,20 +917,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (!menuItem) return;
 
-        if (menuItem.classList.contains('cart-total') ||
-            menuItem.classList.contains('cart-empty') ||
-            menuItem.classList.contains('gallery-title') ||
-            menuItem.classList.contains('gallery-description') ||
-            menuItem.classList.contains('gallery-price') ||
-            menuItem.classList.contains('cart-item-title') ||
-            menuItem.classList.contains('cart-item-image') ||
-            menuItem.classList.contains('cart-item-price') ||
-            menuItem.classList.contains('creator-bio') ||
-            menuItem.classList.contains('contact-bio') ||
-            menuItem.classList.contains('sleepy-bio') ||
-            menuItem.classList.contains('sleepy-bio')) {
-            return;
-        }
+        if (!isSelectable(menuItem)) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -845,3 +941,121 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateActivate(0);
     }
 });
+
+// ============================================
+// EASTER EGGS
+// ============================================
+
+// Konami code: up up down down left right left right B A Start
+// The on-screen buttons dispatch synthetic keydown events on document, so this
+// listener picks up both physical keys and taps without any extra wiring.
+(function() {
+    const KONAMI = [
+        'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
+        'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight',
+        'Escape', 'Enter', ' '
+    ];
+
+    let progress = 0;
+    let unlocked = false;
+
+    function showBanner(text) {
+        const existing = document.querySelector('.konami-banner');
+        if (existing) existing.remove();
+
+        const banner = document.createElement('div');
+        banner.className = 'konami-banner';
+        banner.textContent = text;
+        document.body.appendChild(banner);
+
+        setTimeout(() => banner.remove(), 2600);
+    }
+
+    function triggerKonami() {
+        const container = document.querySelector('.gameboy-container');
+        if (!container) return;
+
+        unlocked = !unlocked;
+        container.classList.toggle('rare-shell', unlocked);
+        showBanner(unlocked ? '★ RARE SHELL UNLOCKED ★' : 'SHELL RESTORED');
+    }
+
+    document.addEventListener('keydown', (e) => {
+        // Don't let the chat box eat the sequence, and ignore stray modifier repeats
+        if (document.activeElement && document.activeElement.id === 'chat-input') {
+            progress = 0;
+            return;
+        }
+
+        if (e.key === KONAMI[progress]) {
+            progress++;
+            if (progress === KONAMI.length) {
+                progress = 0;
+                triggerKonami();
+            }
+        } else {
+            // Allow a wrong key to still start a fresh attempt
+            progress = (e.key === KONAMI[0]) ? 1 : 0;
+        }
+    });
+})();
+
+// ============================================
+// CALIBRATION MODE  -  http://localhost:5000/?calibrate=1
+// ============================================
+// Outlines every hit zone and prints the CSS coordinates of wherever you click on
+// the shell, so button positions can be read off the artwork instead of guessed.
+// Clicking reports offsetX/offsetY on the shell <img>, which is the element's own
+// untransformed coordinate space - the same space the CSS top/left values use, and
+// unaffected by the container scale or the mobile page rotation.
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('calibrate')) return;
+
+    window.addEventListener('DOMContentLoaded', () => {
+        document.body.classList.add('calibrate');
+
+        const shell = document.querySelector('.shell');
+        const container = document.querySelector('.gameboy-container');
+        if (!shell || !container) return;
+
+        const readout = document.createElement('div');
+        readout.className = 'calibrate-readout';
+        readout.textContent = 'CALIBRATE\nclick the shell for coordinates';
+        document.body.appendChild(readout);
+
+        shell.addEventListener('click', (e) => {
+            const x = Math.round(e.offsetX);
+            const y = Math.round(e.offsetY);
+            const layout = container.getAttribute('data-console');
+            const block =
+                `CALIBRATE  [${layout}]\n` +
+                `image ${shell.naturalWidth}x${shell.naturalHeight}\n` +
+                `\n` +
+                `    top: ${y}px;\n` +
+                `    left: ${x}px;`;
+            readout.textContent = block;
+            console.log(`[calibrate ${layout}]  top: ${y}px;  left: ${x}px;`);
+        });
+    });
+})();
+
+// Select cycles the shell through alternate colorways
+(function() {
+    const COLORWAYS = ['', 'shell-indigo', 'shell-berry', 'shell-lime', 'shell-ice'];
+    let index = 0;
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Shift') return;
+        if (document.activeElement && document.activeElement.id === 'chat-input') return;
+
+        const container = document.querySelector('.gameboy-container');
+        if (!container) return;
+
+        container.classList.remove(...COLORWAYS.filter(Boolean));
+        index = (index + 1) % COLORWAYS.length;
+        if (COLORWAYS[index]) {
+            container.classList.add(COLORWAYS[index]);
+        }
+    });
+})();

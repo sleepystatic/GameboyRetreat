@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{% block title %}Gameboy Retreat{% endblock %}</title>
+    <meta name="description" content="{% block description %}Professionally refurbished Game Boy, Game Boy Color, Game Boy Advance and Nintendo DS handhelds. Cleaned, rehoused and restored to working order.{% endblock %}">
+    {% if canonical %}<link rel="canonical" href="{{ canonical }}">{% endif %}
+
+    <!-- Open Graph: controls how the link looks when pasted into Discord,
+         Reddit, Facebook or iMessage. Without these a shared link is bare text. -->
+    <meta property="og:site_name" content="Gameboy Retreat">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}Gameboy Retreat{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Professionally refurbished retro handhelds.{% endblock %}">
+    {% if canonical %}<meta property="og:url" content="{{ canonical }}">{% endif %}
+    {% block og_image_tag %}{% endblock %}
+    <meta name="twitter:card" content="summary_large_image">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='pages.css') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+
+    {% block structured_data %}{% endblock %}
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9J969LYCWY"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-9J969LYCWY');
+    </script>
+</head>
+<body>
+    <header class="site-header">
+        <a class="brand" href="/">GAMEBOY RETREAT</a>
+        <nav class="site-nav">
+            <a href="/shop">Shop</a>
+            <a href="/">Console Mode</a>
+        </nav>
+    </header>
+
+    <main class="site-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-cols">
+            <section>
+                <h2>What "refurbished" means here</h2>
+                <p>
+                    Every console is sourced as a non-working or worn unit and brought back
+                    by hand: thoroughly cleaned inside and out, rehoused in a new shell, and
+                    any faults repaired so it works like new. Nothing ships until it has been
+                    tested and plays properly.
+                </p>
+            </section>
+            <section>
+                <h2>Returns</h2>
+                <p>
+                    If a console arrives faulty or is not as described, contact us within
+                    30 days for a replacement or full refund. Return shipping is on us when
+                    the fault is ours.
+                </p>
+            </section>
+            <section>
+                <h2>Contact</h2>
+                <p>
+                    <a href="mailto:t.bryan.dev@gmail.com">t.bryan.dev@gmail.com</a><br>
+                    Stockton, CA<br>
+                    Replies within 24 hours
+                </p>
+            </section>
+        </div>
+        <p class="footer-legal">
+            &copy; {{ year }} Gameboy Retreat. Not affiliated with or endorsed by Nintendo.
+        </p>
+    </footer>
+</body>
+</html>
