@@ -7,6 +7,7 @@ import json
 import hmac
 import threading
 import unicodedata
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 import requests
@@ -47,9 +48,20 @@ STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
 # extra dependency beyond `requests`. MAIL_FROM must be an address on a domain you
 # have verified in the Resend dashboard, or the send is rejected.
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
-MAIL_FROM = os.environ.get('MAIL_FROM', 'Gameboy Retreat <onboarding@resend.dev>')
 MAIL_RECIPIENT = os.environ.get('MAIL_RECIPIENT')
 RESEND_ENDPOINT = 'https://api.resend.com/emails'
+
+# Transactional mail (receipts, seller submissions) sends from the root domain.
+# Marketing sends from a subdomain so that if a newsletter ever collects spam
+# complaints, the damaged reputation is confined there and order confirmations
+# keep landing in inboxes.
+MAIL_FROM = os.environ.get('MAIL_FROM', 'Gameboy Retreat <orders@gameboyretreat.com>')
+MARKETING_FROM = os.environ.get(
+    'MARKETING_FROM', 'Gameboy Retreat <hello@news.gameboyretreat.com>'
+)
+
+# Resend Audience that newsletter signups are added to.
+RESEND_AUDIENCE_ID = os.environ.get('RESEND_AUDIENCE_ID')
 
 
 def send_email(subject, body, to=None, reply_to=None):
@@ -90,6 +102,62 @@ def send_email(subject, body, to=None, reply_to=None):
     except requests.RequestException as e:
         print(f"⚠️ Resend request failed: {e}")
         return False
+
+
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[a-zA-Z]{2,}$')
+
+
+def add_to_audience(email, source='site'):
+    """Add a subscriber to the Resend audience.
+
+    Returns (ok, message). The local subscribers table is the source of truth -
+    if Resend is down or the audience id is unset, the address is still captured
+    and can be synced later, so a signup is never silently lost.
+    """
+    email = (email or '').strip().lower()
+    if not EMAIL_RE.match(email):
+        return False, 'That does not look like a valid email address.'
+
+    # Always record locally first.
+    try:
+        with get_cursor(commit=True) as cursor:
+            cursor.execute('''
+                INSERT INTO subscribers (email, source)
+                VALUES (%s, %s)
+                ON CONFLICT (email) DO UPDATE SET unsubscribed_at = NULL
+            ''', (email, source))
+    except Exception as e:
+        print(f"⚠️ Could not store subscriber {email}: {e}")
+        return False, 'Something went wrong. Please try again.'
+
+    if not (RESEND_API_KEY and RESEND_AUDIENCE_ID):
+        print(f"ℹ️ Stored {email} locally; Resend audience not configured")
+        return True, "You're on the list!"
+
+    try:
+        response = requests.post(
+            f'https://api.resend.com/audiences/{RESEND_AUDIENCE_ID}/contacts',
+            headers={
+                'Authorization': f'Bearer {RESEND_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={'email': email, 'unsubscribed': False},
+            timeout=10,
+        )
+        if response.status_code >= 400:
+            # Already-subscribed is a success from the visitor's point of view.
+            print(f"⚠️ Resend audience rejected {email} "
+                  f"({response.status_code}): {response.text}")
+        else:
+            with get_cursor(commit=True) as cursor:
+                cursor.execute(
+                    "UPDATE subscribers SET synced_at = NOW() WHERE email = %s",
+                    (email,),
+                )
+    except requests.RequestException as e:
+        print(f"⚠️ Could not sync {email} to Resend: {e}")
+
+    return True, "You're on the list!"
 
 # PostgreSQL Database connection pool
 #
@@ -245,6 +313,7 @@ def admin_listings():
         'admin_listings.html',
         items=items,
         categories=CATEGORY_LABELS,
+        statuses=LISTING_STATUSES,
         storage_ok=storage_configured(),
     )
 
@@ -257,12 +326,16 @@ def admin_listing_new():
         return render_template(
             'admin_listing_form.html',
             categories=CATEGORY_LABELS,
+            item_types=ITEM_TYPES,
             storage_ok=storage_configured(),
             item=None,
         )
 
     title = (request.form.get('title') or '').strip()
     category = (request.form.get('category') or '').strip()
+    item_type = (request.form.get('item_type') or 'console').strip()
+    if item_type not in ITEM_TYPES:
+        item_type = 'console'
     description = (request.form.get('description') or '').strip()
     price_raw = (request.form.get('price') or '').strip()
     stock_raw = (request.form.get('stock') or '0').strip()
@@ -291,6 +364,7 @@ def admin_listing_new():
         return render_template(
             'admin_listing_form.html',
             categories=CATEGORY_LABELS,
+            item_types=ITEM_TYPES,
             storage_ok=storage_configured(),
             errors=errors,
             form=request.form,
@@ -330,10 +404,12 @@ def admin_listing_new():
     try:
         with get_cursor(commit=True) as cursor:
             cursor.execute('''
-                INSERT INTO inventory (category, title, description, price, stock, images, slug)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO inventory (category, title, description, price, stock,
+                                       images, slug, item_type)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            ''', (category, title, description, price, stock, json.dumps(images), slug))
+            ''', (category, title, description, price, stock, json.dumps(images),
+                  slug, item_type))
             new_id = cursor.fetchone()[0]
     except Exception as e:
         return f"Could not save listing: {e}", 500
@@ -342,22 +418,34 @@ def admin_listing_new():
     return redirect('/admin/listings')
 
 
+LISTING_STATUSES = {
+    'active': 'For sale',
+    'coming_soon': 'Coming soon (visible, not buyable)',
+    'hidden': 'Hidden (not shown anywhere)',
+}
+
+
 @app.route('/admin/listings/<int:listing_id>/stock', methods=['POST'])
 @login_required
 def admin_update_stock(listing_id):
-    """Quick stock adjustment from the inventory table."""
+    """Quick stock and availability adjustment from the inventory table."""
     try:
         stock = max(0, int(request.form.get('stock', '0')))
     except ValueError:
         return redirect('/admin/listings')
 
+    status = request.form.get('status', 'active')
+    if status not in LISTING_STATUSES:
+        status = 'active'
+
     try:
         with get_cursor(commit=True) as cursor:
             cursor.execute(
-                "UPDATE inventory SET stock = %s WHERE id = %s", (stock, listing_id)
+                "UPDATE inventory SET stock = %s, status = %s WHERE id = %s",
+                (stock, status, listing_id),
             )
     except Exception as e:
-        return f"Could not update stock: {e}", 500
+        return f"Could not update listing: {e}", 500
 
     return redirect('/admin/listings')
 
@@ -479,20 +567,32 @@ def normalize_image(path):
     return '/' + path.lstrip('/')
 
 
-def fetch_listings(in_stock_only=False):
+def fetch_listings(include_hidden=False):
     """Every listing as a list of dicts. Shared by the API and the public pages."""
-    where = 'WHERE stock > 0' if in_stock_only else ''
+    # `available` subtracts stock that is currently held by an in-flight checkout,
+    # so a unit someone is paying for right now stops showing as buyable.
+    where = 'WHERE i.status <> %s' if include_hidden is False else 'WHERE TRUE'
+    params = ('hidden',) if include_hidden is False else ()
+
     with get_cursor() as cursor:
         cursor.execute(f'''
-            SELECT id, category, title, stock, price, description, images, slug
-            FROM inventory
+            SELECT i.id, i.category, i.title, i.stock, i.price, i.description,
+                   i.images, i.slug, i.status, i.item_type,
+                   COALESCE((
+                       SELECT SUM(r.quantity) FROM reservations r
+                       WHERE r.listing_id = i.id
+                         AND r.status = 'held'
+                         AND r.expires_at > NOW()
+                   ), 0) AS held
+            FROM inventory i
             {where}
-            ORDER BY category, title
-        ''')
+            ORDER BY i.category, i.title
+        ''', params)
         rows = cursor.fetchall()
 
     items = []
-    for item_id, category, title, stock, price, description, images, slug in rows:
+    for (item_id, category, title, stock, price, description,
+         images, slug, status, item_type, held) in rows:
         if isinstance(images, str):
             try:
                 images_list = json.loads(images)
@@ -503,18 +603,250 @@ def fetch_listings(in_stock_only=False):
         else:
             images_list = []
 
+        # Labour has no inventory: a repair slot cannot sell out the way a console
+        # can, so services and lessons ignore stock entirely.
+        is_service = item_type in SERVICE_TYPES
+
+        if is_service:
+            available = 1
+            purchasable = status == 'active'
+        else:
+            available = max(0, int(stock) - int(held))
+            purchasable = available > 0 and status == 'active'
+
         items.append({
             'id': item_id,
             'category': category,
             'title': title,
             'stock': stock,
+            'held': int(held),
+            'available': available,
+            'status': status,
+            'item_type': item_type,
+            'is_service': is_service,
             'price': float(price),
             'description': description or '',
             'images': [normalize_image(p) for p in images_list],
             'slug': slug or slugify(title),
-            'in_stock': stock > 0,
+            # in_stock means "a customer can buy this right now"
+            'in_stock': purchasable,
         })
     return items
+
+
+# ============================================================
+# STOCK RESERVATIONS
+#
+# Stock used to be decremented in the Stripe webhook, i.e. after the card was
+# charged. Two people buying the last unit would therefore both succeed at
+# checkout and both be charged - one of them for something that cannot ship.
+#
+# Instead a hold is taken *before* the Stripe session is created, inside a
+# transaction that locks the inventory rows. Holds expire on their own, so an
+# abandoned checkout releases its stock without any cleanup job needing to run.
+# ============================================================
+
+HOLD_MINUTES = 30      # must be >= the Stripe Checkout session lifetime
+
+# Item types that represent labour rather than a physical unit. They are never
+# reserved, never sell out, and do not need a shipping address.
+SERVICE_TYPES = ('service', 'lesson')
+
+
+class OutOfStock(Exception):
+    """Raised when a cart cannot be reserved. Carries the offending titles."""
+
+    def __init__(self, unavailable):
+        self.unavailable = unavailable
+        super().__init__('; '.join(unavailable))
+
+
+def reserve_cart(cart_items):
+    """Atomically hold stock for every line in the cart.
+
+    Returns a hold token to attach to the Stripe session.
+    Raises OutOfStock if any line cannot be satisfied - nothing is held in that
+    case, because the whole thing runs in one transaction.
+    """
+    wanted = {}
+    for item in cart_items:
+        key = item.get('listing_id') or (item.get('category'), item.get('title'))
+        wanted[key] = wanted.get(key, 0) + 1
+
+    token = uuid.uuid4().hex
+    unavailable = []
+
+    with get_cursor(commit=True) as cursor:
+        for key, qty in wanted.items():
+            # FOR UPDATE serialises concurrent checkouts on this row: the second
+            # transaction blocks here until the first commits its hold, then sees
+            # the updated availability.
+            if isinstance(key, tuple):
+                cursor.execute('''
+                    SELECT id, title, stock, status, item_type FROM inventory
+                    WHERE category = %s AND title = %s
+                    FOR UPDATE
+                ''', key)
+            else:
+                cursor.execute('''
+                    SELECT id, title, stock, status, item_type FROM inventory
+                    WHERE id = %s
+                    FOR UPDATE
+                ''', (key,))
+
+            row = cursor.fetchone()
+            if not row:
+                unavailable.append(f"{key} (no longer listed)")
+                continue
+
+            listing_id, title, stock, status, item_type = row
+
+            # Labour cannot sell out, so there is nothing to hold - only the
+            # status matters.
+            if item_type in SERVICE_TYPES:
+                if status != 'active':
+                    unavailable.append(f"{title} (not available)")
+                continue
+
+            cursor.execute('''
+                SELECT COALESCE(SUM(quantity), 0) FROM reservations
+                WHERE listing_id = %s AND status = 'held' AND expires_at > NOW()
+            ''', (listing_id,))
+            held = cursor.fetchone()[0]
+
+            available = max(0, int(stock) - int(held))
+            if status != 'active':
+                unavailable.append(f"{title} (not available)")
+            elif available < qty:
+                unavailable.append(
+                    f"{title} (only {available} left)" if available
+                    else f"{title} (sold out)"
+                )
+            else:
+                cursor.execute('''
+                    INSERT INTO reservations (listing_id, hold_token, quantity, expires_at)
+                    VALUES (%s, %s, %s, NOW() + INTERVAL '%s minutes')
+                ''', (listing_id, token, qty, HOLD_MINUTES))
+
+        if unavailable:
+            # Raising rolls the transaction back, so no partial holds survive.
+            raise OutOfStock(unavailable)
+
+    return token
+
+
+def price_cart(cart_items):
+    """Resolve each cart line against the database.
+
+    The browser sends titles and prices; trusting either would let a tampered
+    cart set its own price. Only the id/title is used to look the row up - the
+    amount charged always comes from the database.
+    """
+    counts = {}
+    for item in cart_items:
+        key = item.get('listing_id') or (item.get('category'), item.get('title'))
+        counts[key] = counts.get(key, 0) + 1
+
+    priced, missing = [], []
+    with get_cursor() as cursor:
+        for key, quantity in counts.items():
+            if isinstance(key, tuple):
+                cursor.execute(
+                    "SELECT title, price, images, item_type FROM inventory "
+                    "WHERE category = %s AND title = %s", key
+                )
+            else:
+                cursor.execute(
+                    "SELECT title, price, images, item_type FROM inventory WHERE id = %s",
+                    (key,)
+                )
+            row = cursor.fetchone()
+            if not row:
+                missing.append(str(key))
+                continue
+
+            title, price, images, item_type = row
+            if isinstance(images, str):
+                try:
+                    images = json.loads(images)
+                except ValueError:
+                    images = []
+            first = normalize_image(images[0]) if images else ''
+
+            priced.append({
+                'title': title,
+                'price': float(price),
+                'image': first,
+                'quantity': quantity,
+                'item_type': item_type,
+            })
+
+    if missing:
+        raise OutOfStock(missing)
+    return priced
+
+
+def attach_session_to_hold(token, session_id):
+    """Record which Stripe session owns a hold, so the webhook can find it."""
+    try:
+        with get_cursor(commit=True) as cursor:
+            cursor.execute(
+                "UPDATE reservations SET checkout_session_id = %s WHERE hold_token = %s",
+                (session_id, token),
+            )
+    except Exception as e:
+        print(f"⚠️ Could not link hold {token} to session {session_id}: {e}")
+
+
+def release_hold(token):
+    """Give held stock back - used when Stripe fails after we reserved."""
+    try:
+        with get_cursor(commit=True) as cursor:
+            cursor.execute(
+                "UPDATE reservations SET status = 'released' "
+                "WHERE hold_token = %s AND status = 'held'",
+                (token,),
+            )
+    except Exception as e:
+        print(f"⚠️ Could not release hold {token}: {e}")
+
+
+def consume_hold(token, session_id):
+    """Payment succeeded: turn the hold into an actual stock decrement.
+
+    Matches any row that has not already been consumed - including one that was
+    released or expired. A released hold plus a completed payment means the buyer
+    came back and finished after all, and the sale is real either way; refusing to
+    decrement there would oversell the item.
+
+    Idempotent: only status <> 'consumed' rows are touched, so Stripe's webhook
+    retries cannot decrement twice.
+    """
+    with get_cursor(commit=True) as cursor:
+        cursor.execute('''
+            SELECT listing_id, quantity FROM reservations
+            WHERE hold_token = %s AND status <> 'consumed'
+            FOR UPDATE
+        ''', (token,))
+        rows = cursor.fetchall()
+
+        if not rows:
+            print(f"ℹ️ Hold {token} already consumed; nothing to decrement")
+            return 0
+
+        for listing_id, quantity in rows:
+            cursor.execute('''
+                UPDATE inventory SET stock = GREATEST(0, stock - %s)
+                WHERE id = %s
+            ''', (quantity, listing_id))
+
+        cursor.execute('''
+            UPDATE reservations
+            SET status = 'consumed', checkout_session_id = COALESCE(checkout_session_id, %s)
+            WHERE hold_token = %s AND status <> 'consumed'
+        ''', (session_id, token))
+
+    return len(rows)
 
 
 # Database setup
@@ -575,6 +907,58 @@ def init_db():
             cursor.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS inventory_slug_idx ON inventory (slug)"
             )
+
+            # Manual availability override, independent of quantity. 'active' is for
+            # sale; 'hidden' hides it everywhere; 'coming_soon' shows it but blocks
+            # purchase. Quantity still lives in `stock`.
+            cursor.execute(
+                "ALTER TABLE inventory ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'"
+            )
+
+            # What is being sold. 'console' is a physical unit with finite stock;
+            # 'service' (send-in repair/mod) and 'lesson' (booked time) are labour,
+            # so they never run out and are never reserved.
+            cursor.execute(
+                "ALTER TABLE inventory ADD COLUMN IF NOT EXISTS item_type TEXT NOT NULL DEFAULT 'console'"
+            )
+
+            # Stock holds placed when a checkout starts. Without these, two people
+            # can both pay for the last unit: stock was only decremented in the
+            # webhook, which runs after the card is charged.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS reservations (
+                    id SERIAL PRIMARY KEY,
+                    listing_id INTEGER NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
+                    hold_token TEXT NOT NULL,
+                    checkout_session_id TEXT,
+                    quantity INTEGER NOT NULL DEFAULT 1,
+                    status TEXT NOT NULL DEFAULT 'held',
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS reservations_active_idx
+                ON reservations (listing_id, status, expires_at)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS reservations_token_idx
+                ON reservations (hold_token)
+            ''')
+
+            # Newsletter signups. Kept locally as well as in Resend so the list
+            # survives a provider change and so a failed API call never loses an
+            # address that someone actually typed in.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS subscribers (
+                    id SERIAL PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE,
+                    source TEXT DEFAULT 'site',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    synced_at TIMESTAMP,
+                    unsubscribed_at TIMESTAMP
+                )
+            ''')
 
         backfill_slugs()
         print("✅ Database tables initialized")
@@ -692,42 +1076,80 @@ def create_checkout_session():
         if not cart_items:
             return jsonify({'error': 'Cart is empty'}), 400
 
-        # Convert cart items to Stripe line items
+        # Hold the stock BEFORE sending anyone to Stripe. If someone else got
+        # there first this fails now, with an explanation, instead of charging
+        # a card for something that cannot ship.
+        try:
+            hold_token = reserve_cart(cart_items)
+        except OutOfStock as e:
+            return jsonify({
+                'error': 'Some items are no longer available',
+                'unavailable': e.unavailable,
+            }), 409
+
+        # Prices come from the database, never from the browser - otherwise a
+        # tampered cart could set its own price.
+        try:
+            priced = price_cart(cart_items)
+        except OutOfStock as e:
+            release_hold(hold_token)
+            return jsonify({
+                'error': 'Some items are no longer available',
+                'unavailable': e.unavailable,
+            }), 409
+
+        root = request.url_root.rstrip('/')
         line_items = []
-        for item in cart_items:
+        for entry in priced:
+            product = {'name': entry['title']}
+            if entry['image']:
+                image = entry['image']
+                product['images'] = [image if image.startswith('http') else root + image]
             line_items.append({
                 'price_data': {
                     'currency': 'usd',
-                    'product_data': {
-                        'name': item['title'],
-                        'images': [request.url_root.rstrip('/') + '/' + item['img']],
-                    },
-                    'unit_amount': int(item['price'] * 100),
+                    'product_data': product,
+                    'unit_amount': int(round(entry['price'] * 100)),
                 },
-                'quantity': 1,
+                'quantity': entry['quantity'],
             })
 
-        # Create Stripe checkout session
-        checkout_session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=line_items,
-            mode='payment',
-            success_url=request.url_root + 'success?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url=request.url_root + 'cancel',
-            shipping_address_collection={
-                'allowed_countries': ['US', 'CA'],
-            },
-            metadata={
-                # The webhook needs the cart to decrement inventory
-                'cart': json.dumps([
-                    {'category': i['category'], 'title': i['title']} for i in cart_items
-                ])[:500]
-            },
-        )
+        # A cart of nothing but labour has nothing to post, so don't make the
+        # customer type an address they don't need to give.
+        needs_shipping = any(e['item_type'] not in SERVICE_TYPES for e in priced)
 
-        return jsonify({'sessionId': checkout_session.id})
+        session_args = {
+            'payment_method_types': ['card'],
+            'line_items': line_items,
+            'mode': 'payment',
+            'success_url': request.url_root + 'success?session_id={CHECKOUT_SESSION_ID}',
+            # The token rides along so backing out of Stripe frees the stock
+            # immediately instead of waiting for the hold to time out.
+            'cancel_url': request.url_root + 'cancel?hold=' + hold_token,
+            'expires_at': int(datetime.now().timestamp()) + HOLD_MINUTES * 60,
+            # The hold token is all the webhook needs - the reservation rows
+            # already record exactly which listings to decrement.
+            'metadata': {'hold_token': hold_token},
+        }
+        if needs_shipping:
+            session_args['shipping_address_collection'] = {
+                'allowed_countries': ['US', 'CA'],
+            }
+
+        try:
+            checkout_session = stripe.checkout.Session.create(**session_args)
+        except Exception:
+            release_hold(hold_token)
+            raise
+
+        attach_session_to_hold(hold_token, checkout_session.id)
+
+        # The client keeps the token so that if the buyer closes the Stripe tab
+        # and comes back, the hold can be dropped on the next page load.
+        return jsonify({'sessionId': checkout_session.id, 'holdToken': hold_token})
 
     except Exception as e:
+        print(f"Checkout error: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -736,12 +1158,19 @@ def get_stock():
     """Return current inventory, grouped by category, for the Game Boy UI."""
     try:
         listings = {}
-        for item in fetch_listings(in_stock_only=True):
+        for item in fetch_listings():
             listings.setdefault(item['category'], []).append({
+                'id': item['id'],
                 'title': item['title'],
                 'description': item['description'],
                 'price': item['price'],
-                'stock': item['stock'],
+                # `stock` is what the UI should judge availability by: it already
+                # has in-flight checkout holds subtracted.
+                'stock': item['available'],
+                'status': item['status'],
+                'in_stock': item['in_stock'],
+                'is_service': item['is_service'],
+                'item_type': item['item_type'],
                 'images': item['images'],
                 'slug': item['slug'],
             })
@@ -766,6 +1195,14 @@ CATEGORY_LABELS = {
     'gameboy-advance': 'Game Boy Advance',
     'gameboy-advance-sp': 'Game Boy Advance SP',
     'nintendo-ds-lite': 'Nintendo DS Lite',
+    'mod-services': 'Mod & Repair Services',
+    'lessons': 'Modding Lessons',
+}
+
+ITEM_TYPES = {
+    'console': 'Console (physical, finite stock)',
+    'service': 'Service (send-in repair or mod)',
+    'lesson': 'Lesson (booked time)',
 }
 
 
@@ -927,7 +1364,46 @@ def success():
 
 @app.route('/cancel')
 def cancel():
+    # Stripe sends the buyer here when they back out. Releasing on arrival means
+    # the item is back on sale in seconds rather than after the hold expires.
+    token = request.args.get('hold')
+    if token:
+        release_hold(token)
+        print(f"↩️ Buyer backed out; released hold {token}")
     return render_template('cancel.html')
+
+
+@app.route('/api/subscribe', methods=['POST'])
+def api_subscribe():
+    """Newsletter signup, from either the web pages or the Game Boy UI."""
+    payload = request.get_json(silent=True) or request.form
+    email = payload.get('email', '')
+    source = payload.get('source', 'site')
+
+    ok, message = add_to_audience(email, source=source)
+
+    # A normal form post (no JS) gets a redirect back with a flash-ish query arg.
+    if not request.is_json and request.form:
+        return redirect('/shop?subscribed=1' if ok else '/shop?subscribed=0')
+
+    return jsonify({'ok': ok, 'message': message}), (200 if ok else 400)
+
+
+@app.route('/api/release-hold', methods=['POST'])
+def api_release_hold():
+    """Best-effort release from the browser (sendBeacon on tab close).
+
+    Releasing stock is the safe direction - the worst a bad actor achieves is
+    putting an item back on sale - so this needs no authentication. A payment
+    that completes afterwards still decrements, because consume_hold matches
+    released rows too.
+    """
+    token = (request.get_json(silent=True) or {}).get('hold_token')
+    if not token:
+        token = request.form.get('hold_token')
+    if token:
+        release_hold(token)
+    return jsonify({'released': bool(token)})
 
 
 @app.route('/webhook', methods=['POST'])
@@ -954,14 +1430,22 @@ def webhook():
             shipping_name = shipping.get('name', 'N/A') if shipping else 'N/A'
             shipping_address = shipping.get('address', {}) if shipping else {}
 
-            # The cart is echoed back through session metadata so the webhook knows
-            # which inventory rows to decrement.
-            try:
-                cart_items = json.loads(session.get('metadata', {}).get('cart', '[]'))
-            except (TypeError, ValueError):
-                cart_items = []
+            hold_token = (session.get('metadata') or {}).get('hold_token')
 
-            # Save order to database
+            # What was actually bought, straight from Stripe rather than the
+            # browser's version of the cart.
+            try:
+                line_items = stripe.checkout.Session.list_line_items(session_id, limit=100)
+                purchased = [
+                    {'title': li.get('description'),
+                     'quantity': li.get('quantity'),
+                     'amount': (li.get('amount_total') or 0) / 100}
+                    for li in line_items.get('data', [])
+                ]
+            except Exception as e:
+                print(f"⚠️ Could not read line items for {session_id}: {e}")
+                purchased = []
+
             try:
                 with get_cursor(commit=True) as cursor:
                     cursor.execute('''
@@ -974,22 +1458,33 @@ def webhook():
                         shipping_name,
                         amount_total,
                         json.dumps(shipping_address),
-                        json.dumps(cart_items)
+                        json.dumps(purchased)
                     ))
-
-                    # Reduce stock in database
-                    for item in cart_items:
-                        cursor.execute('''
-                            UPDATE inventory
-                            SET stock = stock - 1
-                            WHERE category = %s AND title = %s AND stock > 0
-                        ''', (item['category'], item['title']))
-
                 print(f"✅ Order saved: {session_id}")
             except Exception as db_err:
                 print(f"⚠️ Order save failed: {db_err}")
 
+            # Turn the hold into a real decrement. Idempotent, because Stripe
+            # retries webhooks and this must not run twice.
+            if hold_token:
+                try:
+                    n = consume_hold(hold_token, session_id)
+                    print(f"✅ Consumed hold {hold_token} ({n} line(s))")
+                except Exception as e:
+                    print(f"⚠️ Could not consume hold {hold_token}: {e}")
+            else:
+                print(f"⚠️ Session {session_id} had no hold_token; stock not adjusted")
+
             print(f"✅ Payment successful for: {customer_email} - ${amount_total}")
+
+        elif event['type'] in ('checkout.session.expired', 'checkout.session.async_payment_failed'):
+            # Abandoned or failed checkout - hand the stock back immediately
+            # rather than waiting for the hold to time out.
+            session = event['data']['object']
+            hold_token = (session.get('metadata') or {}).get('hold_token')
+            if hold_token:
+                release_hold(hold_token)
+                print(f"↩️ Released hold {hold_token} ({event['type']})")
 
         return jsonify({'status': 'success'})
 

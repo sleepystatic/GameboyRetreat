@@ -53,7 +53,9 @@
         <p class="listing-price">${{ '%.2f'|format(item.price) }}</p>
 
         <p class="listing-stock {{ 'in-stock' if item.in_stock else 'out-of-stock' }}">
-            {% if item.in_stock %}
+            {% if item.is_service %}
+                {{ 'Accepting bookings' if item.in_stock else 'Currently closed' }}
+            {% elif item.in_stock %}
                 Available &mdash; {{ item.stock }} in stock
             {% else %}
                 Sold out
@@ -81,12 +83,32 @@
         {% endif %}
 
         <dl class="listing-specs">
-            <dt>Condition</dt>
-            <dd>Refurbished &mdash; cleaned, rehoused, faults repaired, fully tested</dd>
-            <dt>Returns</dt>
-            <dd>30 days if faulty or not as described</dd>
-            <dt>Ships from</dt>
-            <dd>Stockton, CA</dd>
+            {% if item.item_type == 'lesson' %}
+                <dt>Format</dt>
+                <dd>One-to-one over Zoom, screen sharing both ways</dd>
+                <dt>Scheduling</dt>
+                <dd>We email you within 24 hours to book a time that suits you</dd>
+                <dt>Rescheduling</dt>
+                <dd>Free with 24 hours notice</dd>
+            {% elif item.item_type == 'service' %}
+                <dt>How it works</dt>
+                <dd>You post us your console, we do the work and post it back</dd>
+                <dt>Turnaround</dt>
+                <dd>Typically 5&ndash;7 days from arrival</dd>
+                <dt>Warranty</dt>
+                <dd>30 days on all work carried out</dd>
+                <dt>Return shipping</dt>
+                <dd>Included</dd>
+            {% else %}
+                <dt>Condition</dt>
+                <dd>Refurbished &mdash; cleaned, rehoused, faults repaired, fully tested</dd>
+                <dt>Warranty</dt>
+                <dd>30 days &mdash; replacement or full refund if it fails</dd>
+                <dt>Returns</dt>
+                <dd>30 days if faulty or not as described</dd>
+                <dt>Ships from</dt>
+                <dd>Stockton, CA</dd>
+            {% endif %}
         </dl>
     </div>
 </article>

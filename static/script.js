@@ -111,6 +111,7 @@ const MENUS = {
         { label: 'Shop', action: 'menu:shop-menu' },
         { label: 'Cart', action: 'cart' },
         { label: 'Sell To Us', action: 'sell' },
+        { label: 'Notify Me', action: 'menu:notify-menu' },
         { label: 'About', action: 'menu:about-menu' },
         { label: 'Switch Console', action: 'switchConsole', desktopOnly: true },
     ],
@@ -120,6 +121,8 @@ const MENUS = {
         { label: 'Gameboy Advance', action: 'category:gameboy-advance' },
         { label: 'Gameboy Advance SP', action: 'category:gameboy-advance-sp' },
         { label: 'Nintendo DS Lite', action: 'category:nintendo-ds-lite' },
+        { label: 'Mod My Console', action: 'category:mod-services' },
+        { label: 'Modding Lessons', action: 'category:lessons' },
     ],
     'about-menu': [
         { label: 'Back', action: 'menu:main-menu' },
@@ -152,6 +155,11 @@ const MENUS = {
         { label: 'Start Submission', action: 'openSellChat' },
         { label: 'Back', action: 'menu:main-menu' },
     ],
+    'notify-menu': [
+        { label: 'Most consoles are one of a kind. Get the photos before they go public.', info: true },
+        { label: 'Enter Email', action: 'subscribePrompt' },
+        { label: 'Back', action: 'menu:main-menu' },
+    ],
 };
 
 // Menus whose contents are generated at runtime - rendered by their own functions.
@@ -160,7 +168,7 @@ const DYNAMIC_MENUS = ['cart-menu', 'gallery-menu', 'category-listings-menu'];
 // A single source of truth for "the cursor cannot land here". Replaces the three
 // copies of this list that had already drifted apart.
 const NON_SELECTABLE = [
-    'info', 'cart-total', 'cart-empty', 'out-of-stock',
+    'info', 'cart-total', 'cart-empty', 'out-of-stock', 'cart-warning',
     'gallery-title', 'gallery-description', 'gallery-price',
     'cart-item-title', 'cart-item-image', 'cart-item-price',
 ];
@@ -207,8 +215,68 @@ function renderMenus() {
     screen.innerHTML = html.join('');
 }
 
+// ============================================
+// AVAILABILITY
+// ============================================
+// `stock` from /api/stock already has in-flight checkout holds subtracted, so a
+// unit someone else is paying for right now reads as unavailable here.
+
+function isAvailable(item) {
+    if (!item) return false;
+    if (item.status && item.status !== 'active') return false;
+    // Labour has no inventory - a repair slot cannot sell out.
+    if (item.is_service) return true;
+    return (item.stock ?? 0) > 0;
+}
+
+function stockIcon(item) {
+    if (item && item.status === 'coming_soon') return '◷';
+    return '✖';
+}
+
+function stockLabel(item) {
+    if (item && item.status === 'coming_soon') return 'Coming Soon';
+    return 'Out of Stock';
+}
+
+// Find a listing by the identity stored on a cart entry.
+function findListing(entry) {
+    const bucket = listings[entry.category];
+    if (!bucket) return null;
+    if (entry.listing_id != null) {
+        const byId = bucket.find(i => i.id === entry.listing_id);
+        if (byId) return byId;
+    }
+    return bucket.find(i => i.title === entry.title) || null;
+}
+
+// If a checkout was started and the buyer came back without completing it, drop
+// the hold now rather than making the next customer wait for it to expire. A
+// completed payment is unaffected: consuming a hold wins over releasing it.
+async function releasePendingHold() {
+    let token = null;
+    try {
+        token = localStorage.getItem('gameboyPendingHold');
+    } catch (e) {
+        return;
+    }
+    if (!token) return;
+
+    try {
+        localStorage.removeItem('gameboyPendingHold');
+        await fetch('/api/release-hold', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hold_token: token }),
+        });
+    } catch (e) {
+        console.warn('Could not release pending hold:', e);
+    }
+}
+
 // Load inventory from database
 let listings = {}; // Start empty
+let inventoryError = false;
 
 async function loadInventory() {
     try {
@@ -222,59 +290,23 @@ async function loadInventory() {
         listings = data;
         console.log('✅ Inventory loaded from database:', listings);
     } catch (error) {
-        console.error('❌ Failed to load inventory, using fallback:', error);
-        // Fallback to hardcoded if API fails
-        listings = {
-            'gameboy-color': [
-                {
-                    images: ['static/images/gbc1.png'],
-                    title: 'Atomic Purple GBC',
-                    description: 'Transparent shell with new buttons. Good working condition.',
-                    price: 175,
-                    stock: 2
-                },
-                {
-                    images: ['static/images/gbc2.png'],
-                    title: 'Teal Blue GBC',
-                    description: 'Refurbished with backlit screen. Minor scratches on back.',
-                    price: 200,
-                    stock: 1
-                }
-            ],
-            'gameboy-advance': [
-                {
-                    images: ['static/images/gba1.png'],
-                    title: 'Clear Purple GBA',
-                    description: 'Fully refurbished with IPS screen upgrade.',
-                    price: 160,
-                    stock: 3
-                }
-            ],
-            'gameboy-advance-sp': [
-                {
-                    images: ['static/images/gbasp-rayquaza/gbasp1.jpg', 'static/images/gbasp-rayquaza/gbasp2.jpg', 'static/images/gbasp-rayquaza/gbasp3.jpg'],
-                    title: 'Rayquaza Edition',
-                    description: 'AGS-001 model fully refurbished and functioning like new.',
-                    price: 185,
-                    stock: 1
-                }
-            ],
-            'nintendo-ds-lite': [
-                {
-                    images: ['static/images/dslite1.png'],
-                    title: 'Polar White DS Lite',
-                    description: 'Pristine condition with new shell.',
-                    price: 150,
-                    stock: 2
-                }
-            ]
-        };
+        // Deliberately no hardcoded fallback catalog. Inventing listings when the
+        // database is unreachable shows customers consoles that may be sold or may
+        // never have existed, at prices that are not current - worse than an
+        // honest error. An empty catalog makes the shop say so instead.
+        console.error('❌ Failed to load inventory:', error);
+        listings = {};
+        inventoryError = true;
     }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Build the static menus from MENUS before anything queries the DOM for them.
     renderMenus();
+
+    // Free any abandoned checkout hold before reading stock, so availability is
+    // accurate the moment the page renders.
+    await releasePendingHold();
 
     // Load inventory FIRST before allowing interaction
     await loadInventory();
@@ -329,7 +361,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     function addToCart(item) {
         const itemsInCart = cart.filter(cartItem => cartItem.id === `${item.category}-${currentGalleryIndex}`).length;
 
-        if (itemsInCart >= item.stock) {
+        // `item.stock` is availability net of other people's in-flight checkouts.
+        if (!isAvailable(item) || itemsInCart >= item.stock) {
             const screen = document.querySelector('.screen');
             const originalContent = screen.innerHTML;
 
@@ -355,6 +388,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const cartItem = {
             id: `${item.category}-${currentGalleryIndex}`,
+            // The database id is what the server reserves against; title matching
+            // is only a fallback for carts saved before this existed.
+            listing_id: item.id ?? null,
             title: item.title,
             price: item.price,
             img: item.images[0],
@@ -364,6 +400,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         cart.push(cartItem);
         localStorage.setItem('gameboyCart', JSON.stringify(cart));
         showCartMessage();
+    }
+
+    // Briefly take over the screen, then put the menu back exactly as it was.
+    function flashMessage(title, subtitle = '', ms = 1600) {
+        const screen = document.querySelector('.screen');
+        const originalContent = screen.innerHTML;
+
+        screen.innerHTML = `
+            <div class="cart-message">
+                <div class="menu-item active">${title}</div>
+                ${subtitle ? `<div class="menu-item">${subtitle}</div>` : ''}
+            </div>
+        `;
+
+        setTimeout(() => {
+            screen.innerHTML = originalContent;
+            currentMenu = screen.querySelector('.menu.active-menu');
+            menuItems = currentMenu.querySelectorAll('.menu-item');
+            updateActivate(currentIndex);
+        }, ms);
     }
 
     function showCartMessage() {
@@ -421,8 +477,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const data = await response.json();
 
+            // 409 means someone else reserved it first. Refresh inventory so the
+            // cart redraws with accurate availability.
+            if (response.status === 409) {
+                await loadInventory();
+                const lines = (data.unavailable || []).map(
+                    t => `<div class="menu-item">${t}</div>`
+                ).join('');
+                screen.innerHTML = `
+                    <div class="cart-message">
+                        <div class="menu-item active">Just Sold!</div>
+                        ${lines}
+                    </div>
+                `;
+                setTimeout(() => {
+                    screen.innerHTML = originalContent;
+                    currentMenu = screen.querySelector('.menu.active-menu');
+                    menuItems = currentMenu.querySelectorAll('.menu-item');
+                    renderCart();
+                }, 2600);
+                return;
+            }
+
             if (data.error) {
                 throw new Error(data.error);
+            }
+
+            // Remember the hold so that closing the Stripe tab and coming back
+            // frees the stock, instead of it sitting held until it expires.
+            if (data.holdToken) {
+                try {
+                    localStorage.setItem('gameboyPendingHold', data.holdToken);
+                } catch (e) { /* private mode - the hold still expires on its own */ }
             }
 
             const result = await stripe.redirectToCheckout({
@@ -472,14 +558,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             let cartHTML = '<li class="menu-item" data-action="back">Back</li>';
             let total = 0;
+            let unavailableCount = 0;
 
             cart.forEach((item, index) => {
-                cartHTML += `<li class="menu-item" data-cart-index="${index}">${item.title} - $${item.price}</li>`;
-                total += item.price;
+                // Re-check against live inventory every time the cart is drawn -
+                // something may have sold while it sat in localStorage.
+                const listing = findListing(item);
+                const gone = listing ? !isAvailable(listing) : true;
+
+                if (gone) {
+                    unavailableCount++;
+                    cartHTML += `<li class="menu-item cart-line-gone" data-cart-index="${index}">
+                        <span class="stock-icon">${stockIcon(listing)}</span>
+                        <span class="strikethrough">${item.title} - $${item.price}</span>
+                        <span class="stock-label">${listing ? stockLabel(listing) : 'No longer listed'}</span>
+                    </li>`;
+                } else {
+                    cartHTML += `<li class="menu-item" data-cart-index="${index}">${item.title} - $${item.price}</li>`;
+                    total += item.price;
+                }
             });
 
             cartHTML += `<li class="menu-item cart-total">Total: $${total}</li>`;
-            cartHTML += `<li class="menu-item" data-action="checkout">Checkout</li>`;
+
+            if (unavailableCount > 0) {
+                cartHTML += `<li class="menu-item cart-warning info">${unavailableCount} item${unavailableCount > 1 ? 's are' : ' is'} no longer available</li>`;
+                cartHTML += `<li class="menu-item" data-action="removeUnavailable">Remove Unavailable</li>`;
+            }
+            if (total > 0) {
+                cartHTML += `<li class="menu-item" data-action="checkout">Checkout</li>`;
+            }
             cartHTML += `<li class="menu-item" data-action="clearCart">Clear Cart</li>`;
             currentMenu.innerHTML = cartHTML;
         }
@@ -595,6 +703,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (input) input.focus();
         },
 
+        subscribePrompt() {
+            // The console has no text entry of its own, so borrow a prompt. Keeps
+            // the D-pad model intact rather than bolting a keyboard into the screen.
+            const email = window.prompt('Email address for new-arrival alerts:');
+            if (email === null) return;
+
+            flashMessage('Signing up...', '', 900);
+            fetch('/api/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, source: 'console-ui' }),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    flashMessage(
+                        data.ok ? "You're on the list!" : 'Hmm...',
+                        data.ok ? 'We will be in touch' : data.message,
+                        2200
+                    );
+                })
+                .catch(() => flashMessage('Connection Error', 'Try again shortly', 2000));
+        },
+
         checkout() { handleCheckout(); },
 
         addToCart() {
@@ -609,6 +740,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 localStorage.setItem('gameboyCart', JSON.stringify(cart));
                 renderCart();
             }
+        },
+
+        removeUnavailable() {
+            cart = cart.filter(entry => {
+                const listing = findListing(entry);
+                return listing && isAvailable(listing);
+            });
+            localStorage.setItem('gameboyCart', JSON.stringify(cart));
+            renderCart();
         },
 
         backToCart() {
@@ -666,10 +806,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (action.startsWith('category:')) {
             const category = action.slice(9);
-            if (listings[category]) {
+            if (listings[category] && listings[category].length) {
                 showCategoryListings(category, category);
             } else {
-                console.warn(`No listings loaded for category "${category}"`);
+                // Say something rather than appearing broken.
+                flashMessage(
+                    inventoryError ? 'Connection Error' : 'None In Stock',
+                    inventoryError ? 'Try again in a moment' : 'Check back soon!'
+                );
             }
             return true;
         }
@@ -868,16 +1012,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         let listingsHTML = `<li class="menu-item" data-action="back">Back</li>`;
 
         items.forEach((item, index) => {
-            if (item.stock > 0) {
-                // In stock - normal listing
+            if (isAvailable(item)) {
                 listingsHTML += `<li class="menu-item" data-listing-category="${category}" data-listing-index="${index}">
                     ${item.title} - $${item.price}
                 </li>`;
             } else {
-                // Out of stock - grayed out with label
                 listingsHTML += `<li class="menu-item out-of-stock">
+                    <span class="stock-icon">${stockIcon(item)}</span>
                     <span class="strikethrough">${item.title} - $${item.price}</span>
-                    <span class="stock-label">Out of Stock</span>
+                    <span class="stock-label">${stockLabel(item)}</span>
                 </li>`;
             }
         });

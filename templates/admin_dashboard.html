@@ -61,7 +61,11 @@
 <body>
     <div class="header">
         <h1>Recent Orders</h1>
-        <a href="/admin/logout" class="logout">Logout</a>
+        <span>
+            <a href="/admin/listings">Inventory</a>
+            <a href="/admin/listings/new">+ New Listing</a>
+            <a href="/admin/logout" class="logout">Logout</a>
+        </span>
     </div>
 
     {% if orders %}

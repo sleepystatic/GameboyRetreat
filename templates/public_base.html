@@ -45,6 +45,24 @@
         {% block content %}{% endblock %}
     </main>
 
+    <section class="signup-band">
+        <div class="signup-inner">
+            <h2>See new restorations first</h2>
+            <p>
+                Most consoles are one of a kind and sell quickly. Subscribers get the
+                photos before anything goes public. No spam, unsubscribe any time.
+            </p>
+            <form class="signup-form" method="post" action="/api/subscribe">
+                <label class="sr-only" for="signup-email">Email address</label>
+                <input id="signup-email" type="email" name="email" required
+                       placeholder="you@example.com" autocomplete="email">
+                <input type="hidden" name="source" value="site-footer">
+                <button type="submit">Notify me</button>
+            </form>
+            <p class="signup-status" id="signup-status" role="status"></p>
+        </div>
+    </section>
+
     <footer class="site-footer">
         <div class="footer-cols">
             <section>
@@ -57,11 +75,11 @@
                 </p>
             </section>
             <section>
-                <h2>Returns</h2>
+                <h2>30-day warranty</h2>
                 <p>
-                    If a console arrives faulty or is not as described, contact us within
-                    30 days for a replacement or full refund. Return shipping is on us when
-                    the fault is ours.
+                    Every console and every repair is covered for 30 days. If something
+                    fails in that window, you get it put right, replaced, or refunded.
+                    Return shipping is on us when the fault is ours.
                 </p>
             </section>
             <section>
@@ -77,5 +95,40 @@
             &copy; {{ year }} Gameboy Retreat. Not affiliated with or endorsed by Nintendo.
         </p>
     </footer>
+
+    <script>
+        // Progressive enhancement: the form posts and redirects perfectly well
+        // without this, but submitting in place is nicer.
+        (function () {
+            var form = document.querySelector('.signup-form');
+            var status = document.getElementById('signup-status');
+            if (!form) return;
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                var button = form.querySelector('button');
+                var email = form.querySelector('input[name=email]').value;
+
+                button.disabled = true;
+                status.textContent = 'Adding you…';
+
+                try {
+                    var res = await fetch('/api/subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email, source: 'site-footer' })
+                    });
+                    var data = await res.json();
+                    status.textContent = data.message;
+                    status.className = 'signup-status ' + (data.ok ? 'ok' : 'err');
+                    if (data.ok) form.reset();
+                } catch (err) {
+                    status.textContent = 'Could not reach the server. Try again?';
+                    status.className = 'signup-status err';
+                }
+                button.disabled = false;
+            });
+        })();
+    </script>
 </body>
 </html>

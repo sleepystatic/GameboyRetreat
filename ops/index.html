@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gameboy Retreat — Operations</title>
+<style>
+  :root{
+    --ink:#0a0a0a; --panel:#161616; --panel2:#1e1e1e; --line:#333;
+    --green:#b2f2bb; --green-dim:#6dbb7a; --text:#e8e8e8; --muted:#9a9a9a;
+    --red:#ff6b6b; --amber:#ffd43b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--text);
+       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+       font-size:13px;line-height:1.5}
+  a{color:var(--green)}
+  h1,h2,h3{margin:0}
+  .hidden{display:none !important}
+
+  /* shell */
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+         flex-wrap:wrap;padding:14px 20px;background:var(--panel);
+         border-bottom:2px solid var(--line)}
+  header h1{font-size:16px;color:var(--green);letter-spacing:1px}
+  nav{display:flex;gap:4px;flex-wrap:wrap}
+  nav button{background:transparent;border:1px solid transparent;color:var(--muted);
+             padding:6px 12px;cursor:pointer;font:inherit}
+  nav button:hover{color:var(--text)}
+  nav button.active{color:var(--green);border-color:var(--line);background:var(--panel2)}
+  main{max-width:1200px;margin:0 auto;padding:20px}
+
+  /* stats */
+  .stats{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+         margin-bottom:24px}
+  .stat{background:var(--panel);border:1px solid var(--line);padding:14px}
+  .stat .label{font-size:10px;text-transform:uppercase;letter-spacing:1px;
+               color:var(--green-dim)}
+  .stat .value{font-size:22px;font-weight:bold;margin-top:4px}
+  .stat .sub{font-size:11px;color:var(--muted)}
+  .stat.warn .value{color:var(--amber)}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin-bottom:8px}
+  th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1px;
+     color:var(--green-dim);padding:8px;border-bottom:2px solid var(--line);
+     white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tbody tr:hover{background:var(--panel)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted)}
+  .low{color:var(--amber);font-weight:bold}
+  .pill{display:inline-block;padding:1px 7px;font-size:10px;letter-spacing:.5px;
+        border:1px solid var(--line);background:var(--panel2)}
+  .pill.available{border-color:var(--green-dim);color:var(--green)}
+  .pill.used,.pill.scrapped{color:var(--muted)}
+  .pill.allocated{border-color:var(--amber);color:var(--amber)}
+
+  /* section headers */
+  .section-head{display:flex;align-items:center;justify-content:space-between;
+                gap:12px;flex-wrap:wrap;margin:0 0 14px}
+  .section-head h2{font-size:14px;text-transform:uppercase;letter-spacing:2px;
+                   color:var(--green)}
+
+  /* forms */
+  button.primary{background:var(--green);color:#0a0a0a;border:2px solid var(--green);
+                 font:inherit;font-weight:bold;padding:8px 16px;cursor:pointer}
+  button.primary:hover{background:#51cf66;border-color:#51cf66}
+  button.primary:disabled{opacity:.5;cursor:default}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);
+               font:inherit;padding:6px 12px;cursor:pointer}
+  button.ghost:hover{color:var(--text);border-color:var(--green-dim)}
+  button.link{background:none;border:none;color:var(--green);cursor:pointer;
+              font:inherit;padding:0;text-decoration:underline}
+
+  input,select,textarea{background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);padding:8px 9px;font:inherit;width:100%}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--green)}
+  label{display:block}
+  label>span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;
+             color:var(--green-dim);margin-bottom:4px}
+  .grid2{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+  .grid3{display:grid;gap:12px;grid-template-columns:1fr 1fr 1fr}
+  @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;
+           align-items:flex-start;justify-content:center;padding:40px 16px;
+           overflow:auto;z-index:100}
+  .modal{background:var(--panel);border:2px solid var(--line);max-width:520px;
+         width:100%;padding:20px}
+  .modal h3{font-size:13px;text-transform:uppercase;letter-spacing:1px;
+            color:var(--green);margin-bottom:16px}
+  .modal .row{margin-bottom:12px}
+  .modal .actions{display:flex;gap:10px;margin-top:18px}
+
+  /* login + setup */
+  .center-wrap{max-width:380px;margin:80px auto;padding:0 16px}
+  .center-wrap h2{font-size:15px;color:var(--green);margin-bottom:6px}
+  .center-wrap p{color:var(--muted);margin:0 0 20px}
+  .center-wrap .row{margin-bottom:12px}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+         background:var(--panel);border:2px solid var(--green);color:var(--green);
+         padding:10px 18px;z-index:200}
+  .toast.err{border-color:var(--red);color:var(--red)}
+  .empty{color:var(--muted);padding:24px 0;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- ---------- one-time setup ---------- -->
+<div id="setup" class="center-wrap hidden">
+  <h2>Connect to Supabase</h2>
+  <p>Stored in this browser only. The anon key is safe here — Row Level Security
+     is what protects the data, and every ops table requires a signed-in user.</p>
+  <div class="row"><label><span>Project URL</span>
+    <input id="cfg-url" placeholder="https://xxxx.supabase.co"></label></div>
+  <div class="row"><label><span>Anon public key</span>
+    <input id="cfg-key" placeholder="eyJ..."></label></div>
+  <button class="primary" id="cfg-save">Save</button>
+</div>
+
+<!-- ---------- login ---------- -->
+<div id="login" class="center-wrap hidden">
+  <h2>Operations</h2>
+  <p>Sign in with your Supabase account.</p>
+  <div class="row"><label><span>Email</span>
+    <input id="login-email" type="email" autocomplete="username"></label></div>
+  <div class="row"><label><span>Password</span>
+    <input id="login-pass" type="password" autocomplete="current-password"></label></div>
+  <button class="primary" id="login-btn">Sign in</button>
+  <p style="margin-top:16px"><button class="link" id="cfg-reset">Change connection</button></p>
+</div>
+
+<!-- ---------- app ---------- -->
+<div id="app" class="hidden">
+  <header>
+    <h1>GAMEBOY RETREAT / OPS</h1>
+    <nav>
+      <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="components">Components</button>
+      <button data-tab="donors">Donors</button>
+    </nav>
+    <button class="ghost" id="signout">Sign out</button>
+  </header>
+
+  <main>
+    <!-- dashboard -->
+    <section id="tab-dashboard">
+      <div class="stats" id="dash-stats"></div>
+      <div class="section-head"><h2>Needs attention</h2></div>
+      <div id="dash-alerts"></div>
+    </section>
+
+    <!-- components -->
+    <section id="tab-components" class="hidden">
+      <div class="section-head">
+        <h2>Components</h2>
+        <div style="display:flex;gap:8px">
+          <button class="ghost" id="add-receipt">Log receipt</button>
+          <button class="primary" id="add-component">+ Component</button>
+        </div>
+      </div>
+      <div id="components-table"></div>
+    </section>
+
+    <!-- donors -->
+    <section id="tab-donors" class="hidden">
+      <div class="section-head">
+        <h2>Donor consoles</h2>
+        <button class="primary" id="add-donor">+ Donor</button>
+      </div>
+      <div id="donors-table"></div>
+    </section>
+  </main>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var CFG_KEY = 'gbr_ops_cfg';
+  var sb = null;
+  var cache = { components: [], donors: [], summary: null };
+
+  // ---------- helpers ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  };
+  var money = function (n) {
+    return '$' + (Number(n) || 0).toLocaleString('en-US',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  function toast(msg, isError) {
+    var el = document.createElement('div');
+    el.className = 'toast' + (isError ? ' err' : '');
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 3200);
+  }
+
+  function show(id) {
+    ['setup', 'login', 'app'].forEach(function (s) {
+      $(s).classList.toggle('hidden', s !== id);
+    });
+  }
+
+  // ---------- modal ----------
+  function modal(title, bodyHtml, onSubmit) {
+    var root = $('modal-root');
+    root.innerHTML =
+      '<div class="overlay"><form class="modal">' +
+        '<h3>' + esc(title) + '</h3>' + bodyHtml +
+        '<div class="actions">' +
+          '<button type="submit" class="primary">Save</button>' +
+          '<button type="button" class="ghost" data-close>Cancel</button>' +
+        '</div>' +
+      '</form></div>';
+
+    var form = root.querySelector('form');
+    var close = function () { root.innerHTML = ''; };
+    root.querySelector('[data-close]').onclick = close;
+    root.querySelector('.overlay').onclick = function (e) {
+      if (e.target === root.querySelector('.overlay')) close();
+    };
+    form.onsubmit = async function (e) {
+      e.preventDefault();
+      var btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      var data = Object.fromEntries(new FormData(form).entries());
+      try {
+        await onSubmit(data);
+        close();
+      } catch (err) {
+        toast(err.message || 'Something went wrong', true);
+        btn.disabled = false;
+      }
+    };
+    var first = form.querySelector('input,select,textarea');
+    if (first) first.focus();
+  }
+
+  var field = function (name, label, attrs) {
+    return '<div class="row"><label><span>' + esc(label) + '</span>' +
+           '<input name="' + name + '" ' + (attrs || '') + '></label></div>';
+  };
+
+  // ---------- data ----------
+  async function loadAll() {
+    var results = await Promise.all([
+      sb.from('component_overview').select('*').order('kind').order('sku'),
+      sb.from('donor_cost').select('*').order('sku'),
+      sb.from('capital_summary').select('*').single()
+    ]);
+
+    for (var i = 0; i < results.length; i++) {
+      if (results[i].error) throw results[i].error;
+    }
+    cache.components = results[0].data || [];
+    cache.donors = results[1].data || [];
+    cache.summary = results[2].data || null;
+
+    renderDashboard();
+    renderComponents();
+    renderDonors();
+  }
+
+  // ---------- render ----------
+  function renderDashboard() {
+    var s = cache.summary;
+    if (!s) { $('dash-stats').innerHTML = ''; return; }
+
+    var stats = [
+      ['Capital tied up', money(s.capital_tied_up), 'components + donors at cost'],
+      ['Component stock', money(s.component_value), cache.components.length + ' types'],
+      ['Donor consoles', money(s.donor_value), s.donors_available + ' available'],
+      ['Low stock', String(s.components_low), 'at or below reorder point',
+       s.components_low > 0]
+    ];
+
+    $('dash-stats').innerHTML = stats.map(function (t) {
+      return '<div class="stat' + (t[3] ? ' warn' : '') + '">' +
+        '<div class="label">' + esc(t[0]) + '</div>' +
+        '<div class="value">' + esc(t[1]) + '</div>' +
+        '<div class="sub">' + esc(t[2]) + '</div></div>';
+    }).join('');
+
+    var low = cache.components.filter(function (c) { return c.needs_reorder; });
+    var oldDonors = cache.donors.filter(function (d) {
+      return d.status === 'available' && d.days_held > 60;
+    });
+
+    var html = '';
+    if (low.length) {
+      html += '<p class="low">Reorder: ' + low.map(function (c) {
+        return esc(c.name) + ' (' + c.qty_on_hand + ' left)';
+      }).join(', ') + '</p>';
+    }
+    if (oldDonors.length) {
+      html += '<p class="low">Held over 60 days: ' + oldDonors.map(function (d) {
+        return esc(d.sku) + ' (' + d.days_held + 'd)';
+      }).join(', ') + '</p>';
+    }
+    $('dash-alerts').innerHTML = html || '<p class="muted">Nothing needs attention.</p>';
+  }
+
+  function renderComponents() {
+    if (!cache.components.length) {
+      $('components-table').innerHTML =
+        '<p class="empty">No components yet. Add one, then log a receipt to set its cost.</p>';
+      return;
+    }
+    $('components-table').innerHTML =
+      '<table><thead><tr>' +
+        '<th>SKU</th><th>Name</th><th>Kind</th>' +
+        '<th class="num">On hand</th><th class="num">Avg cost</th>' +
+        '<th class="num">Stock value</th><th></th>' +
+      '</tr></thead><tbody>' +
+      cache.components.map(function (c) {
+        return '<tr>' +
+          '<td>' + esc(c.sku) + '</td>' +
+          '<td>' + esc(c.name) + '</td>' +
+          '<td class="muted">' + esc(c.kind) + '</td>' +
+          '<td class="num' + (c.needs_reorder ? ' low' : '') + '">' + c.qty_on_hand + '</td>' +
+          '<td class="num">' + money(c.avg_unit_cost) + '</td>' +
+          '<td class="num">' + money(c.stock_value) + '</td>' +
+          '<td><button class="link" data-adjust="' + c.component_id + '">Adjust</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table>';
+
+    Array.prototype.forEach.call(
+      $('components-table').querySelectorAll('[data-adjust]'),
+      function (b) { b.onclick = function () { adjustStock(Number(b.dataset.adjust)); }; }
+    );
+  }
+
+  function renderDonors() {
+    if (!cache.donors.length) {
+      $('donors-table').innerHTML =
+        '<p class="empty">No donor consoles logged yet.</p>';
+      return;
+    }
+    $('donors-table').innerHTML =
+      '<table><thead><tr>' +
+        '<th>SKU</th><th>Model</th><th>Status</th><th class="num">Paid</th>' +
+        '<th class="num">Credits</th><th class="num">Effective</th>' +
+        '<th class="num">Days</th><th></th>' +
+      '</tr></thead><tbody>' +
+      cache.donors.map(function (d) {
+        return '<tr>' +
+          '<td>' + esc(d.sku) + '</td>' +
+          '<td>' + esc(d.model) + '</td>' +
+          '<td><span class="pill ' + esc(d.status) + '">' + esc(d.status) + '</span></td>' +
+          '<td class="num">' + money(d.purchase_price) + '</td>' +
+          '<td class="num">' + (Number(d.credits) ? '-' + money(d.credits) : '—') + '</td>' +
+          '<td class="num"><strong>' + money(d.effective_cost) + '</strong></td>' +
+          '<td class="num muted">' + d.days_held + '</td>' +
+          '<td><button class="link" data-credit="' + d.donor_id + '">+ Credit</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table>';
+
+    Array.prototype.forEach.call(
+      $('donors-table').querySelectorAll('[data-credit]'),
+      function (b) { b.onclick = function () { addCredit(Number(b.dataset.credit)); }; }
+    );
+  }
+
+  // ---------- actions ----------
+  function addComponent() {
+    modal('New component',
+      field('sku', 'SKU', 'required placeholder="SHELL-RAYQ"') +
+      field('name', 'Name', 'required placeholder="Rayquaza shell"') +
+      '<div class="row"><label><span>Kind</span><select name="kind">' +
+        ['shell','screen','port','buttons','misc'].map(function (k) {
+          return '<option value="' + k + '">' + k + '</option>';
+        }).join('') +
+      '</select></label></div>' +
+      field('reorder_at', 'Reorder at', 'type="number" min="0" value="5"') +
+      field('supplier', 'Supplier', 'placeholder="Alibaba"'),
+      async function (d) {
+        var res = await sb.from('components').insert({
+          sku: d.sku.trim(), name: d.name.trim(), kind: d.kind,
+          reorder_at: Number(d.reorder_at) || 0,
+          supplier: d.supplier || null
+        });
+        if (res.error) throw res.error;
+        toast('Component added');
+        await loadAll();
+      });
+  }
+
+  function logReceipt() {
+    if (!cache.components.length) { toast('Add a component first', true); return; }
+    modal('Log a receipt',
+      '<div class="row"><label><span>Component</span><select name="component_id">' +
+        cache.components.map(function (c) {
+          return '<option value="' + c.component_id + '">' +
+                 esc(c.sku) + ' — ' + esc(c.name) + '</option>';
+        }).join('') +
+      '</select></label></div>' +
+      field('qty', 'Quantity received', 'type="number" min="1" required value="20"') +
+      field('total_cost', 'Goods cost (whole batch)', 'type="number" step="0.01" min="0" required') +
+      field('shipping_cost', 'Freight / fees', 'type="number" step="0.01" min="0" value="0"') +
+      field('supplier', 'Supplier', '') +
+      field('reference', 'Order reference', '') +
+      field('received_at', 'Received', 'type="date" value="' +
+            new Date().toISOString().slice(0, 10) + '"') +
+      '<p class="muted" style="font-size:11px">Average unit cost is recalculated from ' +
+      'all receipts, so a cheaper batch lowers the cost basis of future builds.</p>',
+      async function (d) {
+        var res = await sb.from('component_receipts').insert({
+          component_id: Number(d.component_id),
+          qty: Number(d.qty),
+          total_cost: Number(d.total_cost),
+          shipping_cost: Number(d.shipping_cost) || 0,
+          supplier: d.supplier || null,
+          reference: d.reference || null,
+          received_at: d.received_at
+        });
+        if (res.error) throw res.error;
+        toast('Receipt logged — stock updated');
+        await loadAll();
+      });
+  }
+
+  function adjustStock(componentId) {
+    var c = cache.components.filter(function (x) {
+      return x.component_id === componentId;
+    })[0];
+    modal('Adjust ' + (c ? c.sku : ''),
+      '<p class="muted" style="font-size:11px;margin-top:0">On hand: ' +
+        (c ? c.qty_on_hand : '?') + '. Use a negative number to remove ' +
+        '(scrapped, miscounted, used outside a build).</p>' +
+      field('delta', 'Change by', 'type="number" required placeholder="-1"') +
+      '<div class="row"><label><span>Reason</span><select name="reason">' +
+        '<option value="correction">correction</option>' +
+        '<option value="scrap">scrap</option>' +
+        '<option value="build">build</option>' +
+      '</select></label></div>' +
+      field('note', 'Note', ''),
+      async function (d) {
+        var res = await sb.from('component_movements').insert({
+          component_id: componentId,
+          delta: Number(d.delta),
+          reason: d.reason,
+          note: d.note || null
+        });
+        if (res.error) throw res.error;
+        toast('Stock adjusted');
+        await loadAll();
+      });
+  }
+
+  async function nextDonorSku() {
+    var res = await sb.from('donors').select('sku')
+      .order('sku', { ascending: false }).limit(1);
+    var n = 1;
+    if (!res.error && res.data && res.data.length) {
+      var m = /(\d+)$/.exec(res.data[0].sku);
+      if (m) n = Number(m[1]) + 1;
+    }
+    return 'DNR-' + String(n).padStart(4, '0');
+  }
+
+  async function addDonor() {
+    var sku = await nextDonorSku();
+    modal('New donor console',
+      field('sku', 'SKU', 'required value="' + sku + '"') +
+      field('model', 'Model', 'required placeholder="AGS-001"') +
+      field('purchase_price', 'Price paid', 'type="number" step="0.01" min="0" required') +
+      field('acquired_from', 'Bought from', 'placeholder="FB Marketplace"') +
+      field('acquired_at', 'Acquired', 'type="date" value="' +
+            new Date().toISOString().slice(0, 10) + '"') +
+      '<div class="row"><label><span>Condition as received</span>' +
+        '<textarea name="condition_in" rows="2"></textarea></label></div>' +
+      '<p class="muted" style="font-size:11px">Enter the full price you paid, even if ' +
+      'it came bundled with games. Log what you sell off it as a credit and the ' +
+      'effective cost drops automatically.</p>',
+      async function (d) {
+        var res = await sb.from('donors').insert({
+          sku: d.sku.trim(), model: d.model.trim(),
+          purchase_price: Number(d.purchase_price),
+          acquired_from: d.acquired_from || null,
+          acquired_at: d.acquired_at,
+          condition_in: d.condition_in || null
+        });
+        if (res.error) throw res.error;
+        toast('Donor added');
+        await loadAll();
+      });
+  }
+
+  function addCredit(donorId) {
+    var d0 = cache.donors.filter(function (x) { return x.donor_id === donorId; })[0];
+    modal('Credit against ' + (d0 ? d0.sku : ''),
+      '<p class="muted" style="font-size:11px;margin-top:0">Something sold from the ' +
+      'same purchase — a bundled game or accessory. Enter proceeds AFTER fees and ' +
+      'shipping; it comes straight off this console\'s cost.</p>' +
+      field('description', 'What sold', 'required placeholder="Pokemon Emerald, Mercari"') +
+      field('net_proceeds', 'Net proceeds', 'type="number" step="0.01" required placeholder="20.00"') +
+      field('realised_at', 'Sold on', 'type="date" value="' +
+            new Date().toISOString().slice(0, 10) + '"'),
+      async function (d) {
+        var res = await sb.from('donor_credits').insert({
+          donor_id: donorId,
+          description: d.description.trim(),
+          net_proceeds: Number(d.net_proceeds),
+          realised_at: d.realised_at
+        });
+        if (res.error) throw res.error;
+        toast('Credit logged');
+        await loadAll();
+      });
+  }
+
+  // ---------- tabs ----------
+  Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
+    b.onclick = function () {
+      Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (x) {
+        x.classList.toggle('active', x === b);
+      });
+      ['dashboard', 'components', 'donors'].forEach(function (t) {
+        $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab);
+      });
+    };
+  });
+
+  $('add-component').onclick = addComponent;
+  $('add-receipt').onclick = logReceipt;
+  $('add-donor').onclick = addDonor;
+
+  // ---------- auth / boot ----------
+  $('cfg-save').onclick = function () {
+    var url = $('cfg-url').value.trim().replace(/\/$/, '');
+    var key = $('cfg-key').value.trim();
+    if (!url || !key) { toast('Both fields are required', true); return; }
+    localStorage.setItem(CFG_KEY, JSON.stringify({ url: url, key: key }));
+    boot();
+  };
+
+  $('cfg-reset').onclick = function () {
+    localStorage.removeItem(CFG_KEY);
+    boot();
+  };
+
+  $('login-btn').onclick = async function () {
+    var btn = $('login-btn');
+    btn.disabled = true;
+    var res = await sb.auth.signInWithPassword({
+      email: $('login-email').value.trim(),
+      password: $('login-pass').value
+    });
+    btn.disabled = false;
+    if (res.error) { toast(res.error.message, true); return; }
+    await enterApp();
+  };
+
+  $('login-pass').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') $('login-btn').click();
+  });
+
+  $('signout').onclick = async function () {
+    await sb.auth.signOut();
+    show('login');
+  };
+
+  async function enterApp() {
+    show('app');
+    try {
+      await loadAll();
+    } catch (err) {
+      // The usual cause is RLS blocking the read - worth saying so plainly.
+      toast(err.message + ' (check RLS policies and that 001_operations.sql ran)', true);
+    }
+  }
+
+  async function boot() {
+    var raw = localStorage.getItem(CFG_KEY);
+    if (!raw) { show('setup'); return; }
+
+    var cfg;
+    try { cfg = JSON.parse(raw); } catch (e) { show('setup'); return; }
+
+    sb = window.supabase.createClient(cfg.url, cfg.key);
+    var session = await sb.auth.getSession();
+    if (session.data && session.data.session) {
+      await enterApp();
+    } else {
+      show('login');
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

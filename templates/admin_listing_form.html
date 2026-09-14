@@ -31,16 +31,29 @@
             <small>Becomes the public URL, e.g. /listing/rayquaza-edition-sp</small>
         </label>
 
-        <label>
-            <span>Category</span>
-            <select name="category" required>
-                <option value="">Choose one…</option>
-                {% for slug, label in categories.items() %}
-                <option value="{{ slug }}"
-                    {{ 'selected' if form and form.category == slug else '' }}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </label>
+        <div class="field-row">
+            <label>
+                <span>Type</span>
+                <select name="item_type">
+                    {% for value, label in item_types.items() %}
+                    <option value="{{ value }}"
+                        {{ 'selected' if form and form.item_type == value else '' }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <small>Services and lessons never sell out — stock is ignored for them.</small>
+            </label>
+
+            <label>
+                <span>Category</span>
+                <select name="category" required>
+                    <option value="">Choose one…</option>
+                    {% for slug, label in categories.items() %}
+                    <option value="{{ slug }}"
+                        {{ 'selected' if form and form.category == slug else '' }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
 
         <div class="field-row">
             <label>

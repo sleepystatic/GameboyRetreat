@@ -694,6 +694,40 @@ body {
     -webkit-overflow-scrolling: touch;
 }
 
+/* ---- Availability ---- */
+
+/* The icon sits inline in the Game Boy screen, so it is a glyph rather than an
+   image file - it scales with the console and needs no extra request. */
+.stock-icon {
+    display: inline-block;
+    min-width: 14px;
+    margin-right: 5px;
+    font-weight: bold;
+    color: #a33;
+}
+
+.menu-item.out-of-stock .stock-icon,
+.cart-line-gone .stock-icon {
+    color: #a33;
+}
+
+/* Still on the shelf but not purchasable yet reads amber, not red */
+.menu-item.coming-soon .stock-icon { color: #8a6d1f; }
+
+/* A cart line whose listing sold while it was sitting there */
+.menu-item.cart-line-gone {
+    color: #666 !important;
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.menu-item.cart-warning {
+    font-size: 11px;
+    color: #a33 !important;
+    font-style: italic;
+    padding-top: 2px !important;
+}
+
 /* Out of stock styling */
 .menu-item.out-of-stock {
     color: #666 !important;

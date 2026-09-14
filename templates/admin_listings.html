@@ -35,7 +35,8 @@
                 <th>Title</th>
                 <th>Category</th>
                 <th>Price</th>
-                <th>Stock</th>
+                <th>Stock &amp; availability</th>
+                <th>Held</th>
                 <th>Link</th>
             </tr>
         </thead>
@@ -55,8 +56,20 @@
                 <td>
                     <form method="post" action="/admin/listings/{{ item.id }}/stock" class="stock-form">
                         <input type="number" name="stock" value="{{ item.stock }}" min="0">
+                        <select name="status">
+                            {% for value, label in statuses.items() %}
+                            <option value="{{ value }}" {{ 'selected' if item.status == value else '' }}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
                         <button type="submit">Save</button>
                     </form>
+                </td>
+                <td class="muted">
+                    {% if item.held %}
+                        {{ item.held }} in checkout
+                    {% else %}
+                        &mdash;
+                    {% endif %}
                 </td>
                 <td><a href="/listing/{{ item.slug }}" target="_blank">View &nearr;</a></td>
             </tr>
