@@ -1,0 +1,87 @@
+{% extends "public_base.html" %}
+
+{% block title %}Privacy Policy | Gameboy Retreat{% endblock %}
+{% block description %}What Gameboy Retreat collects, why, who processes it, and how to ask for it to be deleted.{% endblock %}
+
+{% block content %}
+<article class="prose">
+    <h1>Privacy policy</h1>
+    <p class="muted">Last updated {{ updated }}</p>
+
+    <p>
+        Gameboy Retreat is a one-person shop in Stockton, California. This page says
+        plainly what the site collects, why, and who else handles it.
+        <strong>Your personal information is never sold.</strong>
+    </p>
+
+    <h2>What is collected</h2>
+
+    <h3>When you buy something</h3>
+    <p>
+        Your name, email address and shipping address, plus what you bought and what
+        you paid. Card details are entered on Stripe's checkout and never reach this
+        site's servers.
+    </p>
+
+    <h3>When you offer a console to sell</h3>
+    <p>
+        Your email address and what you tell us about the item: the console, its
+        condition, your asking price and whether you prefer pickup or shipping.
+    </p>
+
+    <h3>When you join the email list</h3>
+    <p>
+        Your email address. It is used only to send new restorations and shop news,
+        and every email has an unsubscribe link.
+    </p>
+
+    <h3>When you browse</h3>
+    <p>
+        Which pages you view, which buttons you click, and which site sent you here
+        (for example a search engine or a link posted on social media). This is tied
+        to a random identifier kept in your browser for that visit only. It is not
+        linked to your name or email, no cookie is set for it, and it is deleted
+        after 180 days.
+    </p>
+    <p>
+        The site also uses <strong>Google Analytics</strong>, which sets cookies and
+        collects information such as your device type and approximate location.
+        Google's handling of that data is described in
+        <a href="https://policies.google.com/privacy" rel="nofollow noopener" target="_blank">Google's privacy policy</a>,
+        and you can opt out with Google's
+        <a href="https://tools.google.com/dlpage/gaoptout" rel="nofollow noopener" target="_blank">browser add-on</a>.
+    </p>
+
+    <h2>How it is used</h2>
+    <ul>
+        <li>To ship your order and handle warranty claims and returns</li>
+        <li>To reply when you contact us or offer an item for sale</li>
+        <li>To send the email updates you signed up for</li>
+        <li>To understand which pages and products are useful, so the shop improves</li>
+    </ul>
+
+    <h2>Who else processes it</h2>
+    <p>Only services the shop needs to run:</p>
+    <ul>
+        <li><strong>Stripe</strong> &mdash; payments</li>
+        <li><strong>Supabase</strong> &mdash; the database and product photo storage</li>
+        <li><strong>Resend</strong> &mdash; sending email</li>
+        <li><strong>Render</strong> &mdash; hosting the website</li>
+        <li><strong>Google</strong> &mdash; Google Analytics</li>
+    </ul>
+
+    <h2>Your choices</h2>
+    <p>
+        You can unsubscribe from email at any time from the link in any message.
+        To see what is held about you, or to have it deleted, email
+        <a href="mailto:t.bryan.dev@gmail.com">t.bryan.dev@gmail.com</a>.
+        Order records may be kept where they are needed for tax or warranty purposes.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+        Questions about this policy:
+        <a href="mailto:t.bryan.dev@gmail.com">t.bryan.dev@gmail.com</a>
+    </p>
+</article>
+{% endblock %}

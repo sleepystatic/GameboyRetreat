@@ -151,6 +151,12 @@ Or if you'd rather I just did it: send it in.
 
 ## 3. Segmented — past purchasers only
 
+> **Only for people who bought on gameboyretreat.com.** Mercari, OfferUp and
+> Facebook don't give you buyer emails, and using a marketplace buyer's name or
+> address to market to them violates those platforms' terms. Past marketplace
+> customers can't be emailed — they can only be reached through content they
+> choose to follow.
+
 Send only to people who have bought. Warmer tone, and the ask is different: this
 audience is where reviews and repeat business come from.
 

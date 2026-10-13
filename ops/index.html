@@ -178,6 +178,7 @@
 
 <div id="modal-root"></div>
 
+<script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
@@ -582,12 +583,26 @@
     }
   }
 
-  async function boot() {
-    var raw = localStorage.getItem(CFG_KEY);
-    if (!raw) { show('setup'); return; }
+  // config.js wins if it is filled in, so the setup screen is a fallback rather
+  // than something to retype on every machine. localStorage is per-origin, which
+  // is why entering it on localhost:5077 does nothing for ops.gameboyretreat.com.
+  function loadConfig() {
+    var baked = window.OPS_CONFIG;
+    if (baked && baked.url && baked.key) return baked;
 
-    var cfg;
-    try { cfg = JSON.parse(raw); } catch (e) { show('setup'); return; }
+    var raw = localStorage.getItem(CFG_KEY);
+    if (!raw) return null;
+    try {
+      var cfg = JSON.parse(raw);
+      return (cfg && cfg.url && cfg.key) ? cfg : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function boot() {
+    var cfg = loadConfig();
+    if (!cfg) { show('setup'); return; }
 
     sb = window.supabase.createClient(cfg.url, cfg.key);
     var session = await sb.auth.getSession();

@@ -114,7 +114,8 @@ Nobody subscribes to a newsletter. They subscribe to get something.
 
 1. Sign-up form on the site (footer + console UI)
 2. Link in every social bio
-3. Card in every package
+3. Card in packages for **site** orders — see the marketplace rules below before
+   putting anything in a Mercari / OfferUp / Facebook package
 
 ### Cadence
 
@@ -148,7 +149,48 @@ have no such ceiling — that is the point of adding them.
 
 ---
 
-## 5. Trust signals
+## 5. Marketplace rules — protect the channel that pays the bills
+
+Mercari is where most sales happen; a suspension there would cost more than the
+site has ever made. Checked against Mercari's published Community Guidelines,
+Oct 2026:
+
+**What Mercari actually states:**
+
+- Sales must be completed on Mercari — paying or being paid off-platform is an
+  "offline transaction" and isn't protected.
+- *"Communication about your orders should only take place via the Mercari app or
+  website."*
+- Sharing your *Mercari* profile and listing links elsewhere is explicitly fine.
+- Package inserts and business cards are **not mentioned anywhere** in the
+  published guidelines.
+
+**So, in practice:**
+
+- **Cards in packages: fine.** Brand, the warranty, a thank-you, a "reviews help a
+  small shop" note. Widely done, and nothing published prohibits it.
+- **Keep the card from soliciting an off-platform purchase.** "Buy direct next time
+  and skip the fees / 10% off on my site" isn't named in the guidelines, but it's the
+  card most likely to be read as steering a sale off-platform if a buyer reports it.
+  Low reward, avoidable risk. The website on a brand card is a different thing from
+  an offer to undercut Mercari.
+- **Don't put your site URL or contact details in listings.** Not stated on the page
+  above, but it's how off-platform steering usually gets enforced, and it follows
+  directly from the rule that sales stay on Mercari.
+- **Never use a buyer's name or address for your own marketing.** It exists to fulfil
+  that order. No mailers, no adding them to the email list.
+- **Answer order questions inside the app**, even if a buyer messages elsewhere.
+
+Facebook Marketplace and OfferUp local sales are mostly cash, so there is no fee to
+circumvent and far less friction — the rules above matter most for Mercari.
+
+The site's job is not to pull existing marketplace buyers away. It is to capture the
+demand that never reaches a marketplace: Google searches, people who watched a video,
+local repair searches, and send-in work, which marketplaces sell badly anyway.
+
+---
+
+## 6. Trust signals
 
 - 30-day warranty on consoles and repair work (live on site)
 - Review counts: state only what can be substantiated with screenshots.

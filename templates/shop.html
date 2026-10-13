@@ -2,15 +2,22 @@
 
 {% block title %}Shop Refurbished Handhelds | Gameboy Retreat{% endblock %}
 {% block og_title %}Shop Refurbished Handhelds{% endblock %}
-{% block description %}Browse {{ total }} professionally refurbished Game Boy, Game Boy Advance and Nintendo DS handhelds. Cleaned, rehoused and restored by hand.{% endblock %}
+{% block description %}Browse {{ available_count ~ ' ' if available_count }}professionally refurbished Game Boy, Game Boy Advance and Nintendo DS handhelds. Cleaned, rehoused and restored by hand.{% endblock %}
 {% block og_description %}Browse professionally refurbished retro handhelds, restored by hand.{% endblock %}
 
 {% block content %}
 <div class="page-intro">
     <h1>Shop</h1>
     <p>
-        {{ total }} console{{ '' if total == 1 else 's' }} restored by hand. Each one is
+        {# Consoles you can buy right now - services, lessons and sold-out units
+           are not counted. Same number as the landing page's shop button. #}
+        {% if available_count %}
+        {{ available_count }} console{{ '' if available_count == 1 else 's' }} restored by hand. Each one is
         cleaned, rehoused and repaired until it works like new.
+        {% else %}
+        Every console here is restored by hand. Each one is cleaned, rehoused and
+        repaired until it works like new.
+        {% endif %}
     </p>
 </div>
 

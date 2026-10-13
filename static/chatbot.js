@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 userData.price = response;
                 conversationStep = 4;
                 setTimeout(() => {
-                    addMessage("Are you local to Modesto for pickup, or prefer shipping?");
+                    addMessage("Are you local to Stockton for pickup, or prefer shipping?");
                     addButtons(['Local Pickup', 'Shipping']);
                     hideInput();
                 }, 500);

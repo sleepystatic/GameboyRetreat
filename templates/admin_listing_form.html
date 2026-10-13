@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>New Listing | Admin</title>
+    <title>{{ "Edit" if item else "New" }} Listing | Admin</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 </head>
 <body>
 <header class="admin-header">
-    <h1>New Listing</h1>
+    <h1>{{ "Edit: " ~ item.title if item else "New Listing" }}</h1>
     <nav>
         <a href="/admin/listings">&larr; Inventory</a>
         <a href="/admin/logout">Log out</a>
@@ -22,11 +22,35 @@
     </div>
     {% endif %}
 
+    {# token: a stored photo's URL, or 'new:<n>' for the nth file in the upload
+       field. autocomplete=off stops Firefox restoring ticks onto the wrong tiles
+       after a reload, since restoration goes by position, not by photo. #}
+    {% macro photo_tile(token, src, kept=True, badge='') -%}
+    <li class="photo-tile" draggable="true">
+        <input type="hidden" name="photo_order" value="{{ token }}" autocomplete="off">
+        <div class="photo-frame">
+            <img src="{{ src }}" alt="" draggable="false"
+                 onerror="this.closest('.photo-tile').classList.add('is-broken')">
+            <span class="photo-badge">{{ badge }}</span>
+        </div>
+        <div class="photo-controls">
+            <button type="button" data-move="-1" title="Move earlier" aria-label="Move earlier">&#9664;</button>
+            <button type="button" data-move="1" title="Move later" aria-label="Move later">&#9654;</button>
+            <label class="photo-keep">
+                <input type="checkbox" name="keep_images" value="{{ token }}" autocomplete="off"
+                       {{ 'checked' if kept else '' }}>
+                Keep
+            </label>
+        </div>
+        <span class="photo-path" title="{{ src }}">{{ src.rsplit('/', 1)[-1] }}</span>
+    </li>
+    {%- endmacro %}
+
     <form method="post" enctype="multipart/form-data" class="admin-form">
         <label>
             <span>Title</span>
             <input type="text" name="title" required
-                   value="{{ form.title if form else '' }}"
+                   value="{{ form.title if form else (item.title if item else '') }}"
                    placeholder="Rayquaza Edition SP">
             <small>Becomes the public URL, e.g. /listing/rayquaza-edition-sp</small>
         </label>
@@ -37,7 +61,7 @@
                 <select name="item_type">
                     {% for value, label in item_types.items() %}
                     <option value="{{ value }}"
-                        {{ 'selected' if form and form.item_type == value else '' }}>{{ label }}</option>
+                        {{ 'selected' if (form.item_type if form else (item.item_type if item else 'console')) == value else '' }}>{{ label }}</option>
                     {% endfor %}
                 </select>
                 <small>Services and lessons never sell out — stock is ignored for them.</small>
@@ -45,13 +69,19 @@
 
             <label>
                 <span>Category</span>
+                {% set chosen = form.category if form else (item.category if item else '') %}
                 <select name="category" required>
                     <option value="">Choose one…</option>
                     {% for slug, label in categories.items() %}
-                    <option value="{{ slug }}"
-                        {{ 'selected' if form and form.category == slug else '' }}>{{ label }}</option>
+                    <option value="{{ slug }}" {{ 'selected' if chosen == slug else '' }}>{{ label }}</option>
                     {% endfor %}
+                    {# A category missing from the table still shows, so saving an
+                       old listing never silently moves it somewhere else. #}
+                    {% if chosen and chosen not in categories %}
+                    <option value="{{ chosen }}" selected>{{ chosen }} (not in Categories)</option>
+                    {% endif %}
                 </select>
+                <small>Add or remove categories on the <a href="/admin/categories" target="_blank" rel="noopener">Categories page</a>.</small>
             </label>
         </div>
 
@@ -59,33 +89,60 @@
             <label>
                 <span>Price (USD)</span>
                 <input type="number" name="price" step="0.01" min="0" required
-                       value="{{ form.price if form else '' }}" placeholder="185.00">
+                       value="{{ form.price if form else ('%.2f'|format(item.price) if item else '') }}" placeholder="185.00">
             </label>
             <label>
                 <span>Stock</span>
                 <input type="number" name="stock" min="0" required
-                       value="{{ form.stock if form else '1' }}">
+                       value="{{ form.stock if form else (item.stock if item else 1) }}">
                 <small>0 shows the listing as sold out</small>
             </label>
         </div>
 
         <label>
             <span>Description</span>
-            <textarea name="description" rows="5"
-                      placeholder="What you did to it: shell, screen, cleaning, what was repaired, how it was tested.">{{ form.description if form else '' }}</textarea>
-            <small>This is what Google shows under the listing. Be specific.</small>
+            <textarea name="description" rows="8"
+                      placeholder="What you did to it: shell, screen, cleaning, what was repaired, how it was tested.">{{ form.description if form else (item.description if item else '') }}</textarea>
+            <small>Line breaks, blank lines and indents show on the listing exactly as typed. The opening lines are what Google shows under the listing, so be specific.</small>
         </label>
 
+        {% if item %}
         <label>
-            <span>Photos</span>
-            <input type="file" name="photos" multiple accept="image/*"
-                   {{ 'disabled' if not storage_ok else '' }}>
-            {% if storage_ok %}
-                <small>Resized to 1600px and converted to WebP automatically. First photo is the thumbnail.</small>
-            {% else %}
-                <small class="warn-text">Uploads disabled — Supabase Storage is not configured.</small>
-            {% endif %}
+            <span>Availability</span>
+            <select name="status">
+                {% for value, label in statuses.items() %}
+                <option value="{{ value }}" {{ 'selected' if item.status == value else '' }}>{{ label }}</option>
+                {% endfor %}
+            </select>
         </label>
+        {% endif %}
+
+        {# One tile per photo. The hidden photo_order inputs post in page order,
+           which is the order the photos are saved in - see assemble_photos(). #}
+        <div class="photo-editor">
+            <span class="field-label">Photos</span>
+            <p class="hint">
+                The first photo is the cover: the thumbnail in the shop, on Google and
+                in link previews. Drag a photo or use the arrows to reorder.
+                {% if item %}Untick Keep to remove one; the file stays in storage.{% endif %}
+            </p>
+            <ol class="photo-grid" id="photo-grid">
+                {%- for photo in photos %}{{ photo_tile(photo.src, photo.src, photo.kept, 'Cover' if loop.first else loop.index) }}{% endfor -%}
+            </ol>
+            <p class="hint photo-empty">No photos yet.</p>
+            <template id="photo-tile-template">{{ photo_tile('', '') }}</template>
+
+            <label>
+                <span>{{ 'Add photos' if item else 'Upload photos' }}</span>
+                <input type="file" name="photos" id="photo-input" multiple accept="image/*"
+                       {{ 'disabled' if not storage_ok else '' }}>
+                {% if storage_ok %}
+                    <small>Resized to 1600px and converted to WebP automatically. New photos join the end of the list above, so you can reorder them before saving, and picking again adds more rather than replacing them.</small>
+                {% else %}
+                    <small class="warn-text">Uploads disabled — Supabase Storage is not configured.</small>
+                {% endif %}
+            </label>
+        </div>
 
         <label>
             <span>Image URLs</span>
@@ -95,10 +152,195 @@
         </label>
 
         <div class="form-actions">
-            <button type="submit" class="btn-primary">Create Listing</button>
+            <button type="submit" class="btn-primary">{{ "Save Changes" if item else "Create Listing" }}</button>
             <a href="/admin/listings" class="btn-secondary">Cancel</a>
         </div>
     </form>
 </main>
+
+<script>
+    // Photo order. The server saves photos in the order their tiles' hidden
+    // inputs are posted, so rearranging the tiles on the page is the whole job.
+    (function () {
+        var grid = document.getElementById('photo-grid');
+        var input = document.getElementById('photo-input');
+        var template = document.getElementById('photo-tile-template');
+        if (!grid) return;
+
+        grid.classList.add('is-sortable');      // reveals the arrow buttons
+
+        function tiles() {
+            return Array.prototype.slice.call(grid.children);
+        }
+
+        function tileAt(node) {
+            return node && node.closest ? node.closest('.photo-tile') : null;
+        }
+
+        // Badges, cover outline and which arrows can move, from the current
+        // order. An unticked photo keeps its place but drops out of the count.
+        function refresh() {
+            var all = tiles();
+            var kept = 0;
+            all.forEach(function (tile, i) {
+                var keep = tile.querySelector('input[name="keep_images"]').checked;
+                if (keep) kept += 1;
+                tile.classList.toggle('is-cover', keep && kept === 1);
+                tile.querySelector('.photo-badge').textContent =
+                    !keep ? 'Removed' : (kept === 1 ? 'Cover' : String(kept));
+                tile.querySelector('[data-move="-1"]').disabled = i === 0;
+                tile.querySelector('[data-move="1"]').disabled = i === all.length - 1;
+            });
+        }
+
+        // Arrows move the neighbour rather than the tile itself, so the
+        // pressed button keeps keyboard focus and can be pressed again.
+        grid.addEventListener('click', function (e) {
+            var button = e.target.closest('[data-move]');
+            if (!button) return;
+            var tile = tileAt(button);
+            if (button.dataset.move === '-1' && tile.previousElementSibling) {
+                grid.insertBefore(tile.previousElementSibling, tile.nextElementSibling);
+            } else if (button.dataset.move === '1' && tile.nextElementSibling) {
+                grid.insertBefore(tile.nextElementSibling, tile);
+            }
+            refresh();
+            if (button.disabled) {
+                var other = tile.querySelector('[data-move]:not(:disabled)');
+                if (other) other.focus();
+            }
+        });
+
+        grid.addEventListener('change', function (e) {
+            if (e.target.name === 'keep_images') refresh();
+        });
+
+        // Drag and drop for mouse users; touch screens use the arrows. Tiles
+        // shuffle live under the pointer, so the drop has nothing left to do.
+        var dragging = null;
+
+        grid.addEventListener('dragstart', function (e) {
+            dragging = tileAt(e.target);
+            if (!dragging) return;
+            dragging.classList.add('is-dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', '');   // Firefox needs data to start a drag
+        });
+
+        grid.addEventListener('dragover', function (e) {
+            if (!dragging) return;
+            e.preventDefault();
+            var over = tileAt(e.target);
+            if (!over || over === dragging) return;
+            var box = over.getBoundingClientRect();
+            var after = e.clientX > box.left + box.width / 2;
+            grid.insertBefore(dragging, after ? over.nextElementSibling : over);
+            refresh();
+        });
+
+        grid.addEventListener('drop', function (e) {
+            if (dragging) e.preventDefault();
+        });
+
+        grid.addEventListener('dragend', function () {
+            if (!dragging) return;
+            dragging.classList.remove('is-dragging');
+            dragging = null;
+            refresh();
+        });
+
+        // New files get preview tiles at the end, tokened 'new:<n>' by their
+        // position in the file input.
+        if (input && template) {
+            var picked = [];                    // picked[n] is the file for 'new:n'
+            var previewQueue = Promise.resolve();
+
+            function noPreview(tile, unreadable) {
+                tile.classList.remove('is-loading');
+                tile.classList.add(unreadable ? 'is-unreadable' : 'is-broken');
+            }
+
+            // Only Safari can draw HEIC, the format iPhones shoot. When the
+            // browser cannot show a file, the server makes the preview with the
+            // same decoder the real upload uses. One request at a time: a dozen
+            // full-size decodes at once is a lot of memory for a small server.
+            function serverPreview(tile, file) {
+                tile.classList.add('is-loading');
+                previewQueue = previewQueue.then(function () {
+                    if (!tile.isConnected) return;      // removed while queued
+                    var body = new FormData();
+                    body.append('photo', file);
+                    return fetch('/admin/photo-preview', { method: 'POST', body: body })
+                        .then(function (response) {
+                            if (response.status === 422) return noPreview(tile, true);
+                            if (!response.ok) throw new Error('HTTP ' + response.status);
+                            return response.blob().then(function (blob) {
+                                var img = tile.querySelector('img');
+                                tile.dataset.serverPreview = URL.createObjectURL(blob);
+                                img.onload = function () { tile.classList.remove('is-loading'); };
+                                img.onerror = function () { noPreview(tile, false); };
+                                img.src = tile.dataset.serverPreview;
+                            });
+                        })
+                        .catch(function () { noPreview(tile, false); });
+                });
+            }
+
+            function addTile(file, n) {
+                var tile = template.content.firstElementChild.cloneNode(true);
+                var token = 'new:' + n;
+                var img = tile.querySelector('img');
+                var path = tile.querySelector('.photo-path');
+                tile.classList.add('is-new');
+                tile.dataset.preview = URL.createObjectURL(file);
+                tile.querySelector('input[name="photo_order"]').value = token;
+                tile.querySelector('input[name="keep_images"]').value = token;
+                img.onerror = function () {             // replaces the template's handler
+                    img.onerror = null;
+                    serverPreview(tile, file);
+                };
+                img.src = tile.dataset.preview;
+                path.textContent = file.name;
+                path.title = file.name;
+                grid.appendChild(tile);
+            }
+
+            function dropNewTiles() {
+                tiles().forEach(function (tile) {
+                    if (!tile.dataset.preview) return;
+                    URL.revokeObjectURL(tile.dataset.preview);
+                    if (tile.dataset.serverPreview) URL.revokeObjectURL(tile.dataset.serverPreview);
+                    grid.removeChild(tile);
+                });
+            }
+
+            // Picking again normally makes a file input forget the earlier
+            // picks. Put them back so "Add photos" adds. If the browser will not
+            // allow that, keep its replacement and rebuild the tiles to match,
+            // so a tile never promises a photo the form will not send.
+            input.addEventListener('change', function () {
+                var fresh = Array.prototype.slice.call(input.files);
+                var all = picked.concat(fresh);
+                try {
+                    var merged = new DataTransfer();
+                    all.forEach(function (file) { merged.items.add(file); });
+                    input.files = merged.files;
+                } catch (err) { /* older browser - replacement it is */ }
+
+                if (input.files.length === all.length) {
+                    fresh.forEach(function (file, i) { addTile(file, picked.length + i); });
+                    picked = all;
+                } else {
+                    dropNewTiles();
+                    picked = Array.prototype.slice.call(input.files);
+                    picked.forEach(addTile);
+                }
+                refresh();
+            });
+        }
+
+        refresh();
+    })();
+</script>
 </body>
 </html>

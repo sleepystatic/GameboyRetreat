@@ -25,6 +25,11 @@ body {
     transform-origin: center center;
 }
 
+/* Hidden until script.js has scaled the console and its shell has loaded, so it never visibly jumps. */
+.js .gameboy-container:not(.is-ready) {
+    visibility: hidden;
+}
+
 .shell {
     height: auto;
     display: block;
@@ -694,6 +699,28 @@ body {
     -webkit-overflow-scrolling: touch;
 }
 
+/* Descriptions keep the line breaks and indents typed in the admin panel,
+   same as the listing page. Long lines still wrap to the screen. */
+.menu-item.gallery-description {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    tab-size: 4;
+}
+
+/* Right-hand column inside a menu row: category counts, price + quantity.
+   Floated rather than flexed so the existing row layout is untouched. */
+.menu-item .row-meta {
+    float: right;
+    margin-left: 12px;
+    font-size: 0.85em;
+    opacity: 0.8;
+    white-space: nowrap;
+}
+
+.menu-item.active .row-meta { opacity: 1; }
+.menu-item .row-meta-empty { opacity: 0.45; }
+.menu-item.out-of-stock .row-meta { color: #a33; opacity: 1; }
+
 /* ---- Availability ---- */
 
 /* The icon sits inline in the Game Boy screen, so it is a glyph rather than an
@@ -914,4 +941,19 @@ body.calibrate .button-zones .btn::after {
     font: 12px/1.5 monospace;
     white-space: pre;
     pointer-events: none;
+}
+/* Placeholder where a listing has no photo (services, or photos not yet uploaded) */
+.product-image.no-image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 100%;
+    height: 110px;
+    border: 1px dashed #444;
+    background: transparent;
+    color: #555;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Analytics | Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+<header class="admin-header">
+    <h1>Analytics</h1>
+    <nav>
+        <a href="/admin/dashboard">Orders</a>
+        <a href="/admin/listings">Inventory</a>
+        <a href="/admin/logout">Log out</a>
+    </nav>
+</header>
+
+<main class="admin-main">
+
+    <div class="range">
+        {% for d in (7, 30, 90, 180) %}
+        <a href="?days={{ d }}" class="{{ 'on' if d == days else '' }}">{{ d }} days</a>
+        {% endfor %}
+    </div>
+
+    <div class="stat-row">
+        <div class="stat"><span>Visitors</span><strong>{{ visitors }}</strong></div>
+        <div class="stat"><span>Page views</span><strong>{{ pageviews }}</strong></div>
+        <div class="stat"><span>Orders</span><strong>{{ order_count }}</strong></div>
+        <div class="stat"><span>Revenue</span><strong>${{ '%.2f'|format(revenue) }}</strong></div>
+        <div class="stat"><span>Conversion</span>
+            <strong>{{ '%.1f'|format(order_count / visitors * 100) if visitors else '—' }}{{ '%' if visitors else '' }}</strong></div>
+    </div>
+
+    {% if not visitors %}
+    <div class="notice">
+        No visits recorded in this window yet. Data starts collecting from the
+        first deploy that includes tracking. Links with <code>?ref=</code> in them
+        show up under Sources below.
+    </div>
+    {% endif %}
+
+    <section class="panel">
+        <h2>Where they came from</h2>
+        <p class="hint">
+            Source is the first one seen in the last 30 days. Google, Reddit and
+            social referrers are detected automatically; anything else needs a
+            <code>?ref=</code> on the link.
+        </p>
+        {% if sources %}
+        <table class="admin-table">
+            <thead><tr>
+                <th>Source</th><th class="num">Visitors</th><th class="num">Orders</th>
+                <th class="num">Revenue</th><th class="num">Conversion</th>
+            </tr></thead>
+            <tbody>
+            {% for s in sources %}
+            <tr>
+                <td><code>{{ s.name }}</code></td>
+                <td class="num">{{ s.visitors }}</td>
+                <td class="num">{{ s.orders }}</td>
+                <td class="num">${{ '%.2f'|format(s.revenue) }}</td>
+                <td class="num">{{ '%.1f%%'|format(s.conversion) if s.conversion is not none else '—' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}<p class="empty">Nothing yet.</p>{% endif %}
+    </section>
+
+    <section class="panel">
+        <h2>Funnel</h2>
+        <p class="hint">Unique visitors who reached each step.</p>
+        <table class="admin-table funnel">
+            <tbody>
+            {% set top = funnel[0][1] or 1 %}
+            {% for label, n in funnel %}
+            <tr>
+                <td>{{ label }}</td>
+                <td class="num">{{ n }}</td>
+                <td class="bar-cell"><span class="bar" style="width: {{ (n / top * 100)|round(1) }}%"></span></td>
+                <td class="num muted">{{ '%.0f%%'|format(n / top * 100) if funnel[0][1] else '' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    <div class="two-col">
+        <section class="panel">
+            <h2>Most viewed listings</h2>
+            {% if top_listings %}
+            <table class="admin-table">
+                <tbody>
+                {% for l in top_listings %}
+                <tr>
+                    <td><a href="/listing/{{ l.slug }}" target="_blank">{{ l.title }}</a></td>
+                    <td class="num">{{ l.views }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty">Nothing yet.</p>{% endif %}
+        </section>
+
+        <section class="panel">
+            <h2>Top pages</h2>
+            {% if pages %}
+            <table class="admin-table">
+                <thead><tr><th>Path</th><th class="num">Views</th><th class="num">Visitors</th></tr></thead>
+                <tbody>
+                {% for path, views, uniq in pages %}
+                <tr><td><code>{{ path }}</code></td><td class="num">{{ views }}</td><td class="num">{{ uniq }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty">Nothing yet.</p>{% endif %}
+        </section>
+    </div>
+
+    <div class="two-col">
+        <section class="panel">
+            <h2>Shop categories opened</h2>
+            <p class="hint">Inside the Game Boy.</p>
+            {% if categories %}
+            <table class="admin-table">
+                <tbody>
+                {% for cat, n in categories %}
+                <tr><td>{{ category_labels.get(cat, cat) }}</td><td class="num">{{ n }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty">Nothing yet.</p>{% endif %}
+        </section>
+
+        <section class="panel">
+            <h2>Button clicks</h2>
+            {% if ctas %}
+            <table class="admin-table">
+                <tbody>
+                {% for name, n in ctas %}
+                <tr><td><code>{{ name }}</code></td><td class="num">{{ n }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty">Nothing yet.</p>{% endif %}
+        </section>
+    </div>
+
+    <div class="two-col">
+        <section class="panel">
+            <h2>Visitors per day</h2>
+            {% if daily %}
+            <table class="admin-table">
+                <tbody>
+                {% for d, n in daily %}
+                <tr>
+                    <td class="muted">{{ d.strftime('%b %d') }}</td>
+                    <td class="bar-cell"><span class="bar" style="width: {{ (n / peak * 100)|round(1) }}%"></span></td>
+                    <td class="num">{{ n }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty">Nothing yet.</p>{% endif %}
+        </section>
+
+        <section class="panel">
+            <h2>Orders by experience</h2>
+            <p class="hint">Game Boy vs the regular pages.</p>
+            {% if surfaces %}
+            <table class="admin-table">
+                <tbody>
+                {% for name, n, rev in surfaces %}
+                <tr><td><code>{{ name }}</code></td><td class="num">{{ n }}</td><td class="num">${{ '%.2f'|format(rev) }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty">No orders yet.</p>{% endif %}
+        </section>
+    </div>
+
+    <section class="panel">
+        <h2>Tracking links</h2>
+        <p class="hint">
+            Add <code>?ref=</code> to any link you post so it shows up as its own source.
+            Lowercase letters, numbers, dashes. Examples:
+        </p>
+        <ul class="ref-examples">
+            <li><code>gameboyretreat.com/?ref=tiktok</code></li>
+            <li><code>gameboyretreat.com/?ref=card</code> &mdash; the QR on package inserts</li>
+            <li><code>gameboyretreat.com/?ref=gbp</code> &mdash; Google Business Profile website link</li>
+            <li><code>gameboyretreat.com/shop?ref=reddit-webdev</code></li>
+            <li><code>gameboyretreat.com/listing/rayquaza-edition?ref=ig-story</code></li>
+        </ul>
+    </section>
+</main>
+</body>
+</html>

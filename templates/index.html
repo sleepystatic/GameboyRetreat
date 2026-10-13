@@ -3,23 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gameboy Retreat</title>
+    <title>Shop in a Working Game Boy | Gameboy Retreat</title>
+    <meta name="description" content="Browse and buy refurbished Game Boy, Game Boy Advance and DS handhelds inside a working on-screen Game Boy. D-pad to move, A to select.">
+    {% if canonical %}<link rel="canonical" href="{{ canonical }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+        // The console stays hidden until its shell has loaded and been scaled (style.css); this reveals it regardless after 4s.
+        document.documentElement.classList.add('js');
+        setTimeout(function () { var c = document.querySelector('.gameboy-container'); if (c) c.classList.add('is-ready'); }, 4000);
+        // The background video starts after the page has loaded so it never competes with the console for bandwidth.
+        window.addEventListener('load', function () {
+            var v = document.querySelector('.background-elements video');
+            if (!v || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            var play = function () { if (v.paused && document.visibilityState === 'visible') v.play().catch(function () {}); };
+            play();
+            document.addEventListener('visibilitychange', play);
+        });
+    </script>
+    <link rel="preload" as="image" href="{{ url_for('static', filename='gbasp.png') }}" media="(orientation: portrait) and (max-width: 900px)">
+    <link rel="preload" as="image" href="{{ url_for('static', filename='gba_trimmed.webp') }}" media="not all and (orientation: portrait) and (max-width: 900px)">
+    <link rel="preload" as="font" href="{{ url_for('static', filename='fonts/pixel-font.ttf') }}" type="font/ttf" crossorigin>
+    <script src="https://js.stripe.com/v3/" defer></script>
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9J969LYCWY"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-
         gtag('config', 'G-9J969LYCWY');
+        // Analytics loads on the first scroll, tap, or key press (or after 8s) so it never delays the first paint.
+        (function () {
+            var loaded = false;
+            function loadAnalytics() {
+                if (loaded) return;
+                loaded = true;
+                var s = document.createElement('script');
+                s.async = true;
+                s.src = 'https://www.googletagmanager.com/gtag/js?id=G-9J969LYCWY';
+                document.head.appendChild(s);
+            }
+            ['scroll', 'pointerdown', 'keydown', 'touchstart'].forEach(function (type) {
+                window.addEventListener(type, loadAnalytics, { once: true, passive: true });
+            });
+            window.addEventListener('load', function () { setTimeout(loadAnalytics, 8000); });
+        })();
     </script>
+    <!-- Loaded in <head> so source attribution is captured before script.js
+         reads it at checkout. -->
+    <script src="{{ url_for('static', filename='track.js') }}" data-surface="console" defer></script>
 </head>
 <body data-stripe-key="{{ stripe_key }}">
     <div class="background-elements">
-        <video muted autoplay loop playsinline src="{{ url_for('static', filename='background_loop.mp4') }}"></video>
+        <video muted loop playsinline preload="none" src="{{ url_for('static', filename='background_loop_web.mp4') }}"></video>
     </div>
 
     <!-- Shell artwork is declared here and nowhere else - the console switcher reads
@@ -29,11 +64,21 @@
          the viewport. Re-measure with tools/trim_shell_edges.py's bbox if you
          regenerate the artwork. -->
     <div class="gameboy-container" data-console="gba"
-         data-shell-gba="{{ url_for('static', filename='gba_trimmed.png') }}"
+         data-shell-gba="{{ url_for('static', filename='gba_trimmed.webp') }}"
          data-shell-gbasp="{{ url_for('static', filename='gbasp.png') }}"
          data-content-gba="1194 634"
          data-content-gbasp="297 553">
-        <img src="{{ url_for('static', filename='gba_trimmed.png') }}" alt="Game Boy Shell" class="shell">
+        <img alt="Game Boy Shell" class="shell">
+        <script>
+            // Pick the shell before the browser fetches one: the SP on a portrait phone, the GBA everywhere else (same rule as script.js).
+            (function () {
+                var c = document.querySelector('.gameboy-container');
+                var portraitPhone = innerHeight > innerWidth && (Math.min(innerWidth, innerHeight) <= 500 || matchMedia('(max-width: 900px)').matches);
+                var layout = portraitPhone ? 'gbasp' : 'gba';
+                c.setAttribute('data-console', layout);
+                c.querySelector('.shell').src = c.getAttribute('data-shell-' + layout);
+            })();
+        </script>
 
         <div class="gameboy-title">GAMEBOY RETREAT</div>
 
@@ -81,6 +126,8 @@
     <!-- Shown only on portrait phones: turning the device is how you reach the GBA -->
     <div class="rotate-hint">↻ Turn your phone sideways for the Game Boy Advance</div>
 
+    <!-- The shop menu's categories, from admin > Categories. tojson is HTML-safe. -->
+    <script id="shop-categories" type="application/json">{{ shop_categories|tojson }}</script>
     <script src="{{ url_for('static', filename='chatbot.js') }}"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

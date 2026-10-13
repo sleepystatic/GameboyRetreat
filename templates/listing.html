@@ -3,8 +3,8 @@
 {% block title %}{{ item.title }} | Gameboy Retreat{% endblock %}
 {% block og_title %}{{ item.title }} &mdash; ${{ '%.2f'|format(item.price) }}{% endblock %}
 {% block og_type %}product{% endblock %}
-{% block description %}{{ item.description[:155] if item.description else item.title ~ ' - professionally refurbished and tested.' }}{% endblock %}
-{% block og_description %}{{ item.description[:155] if item.description else item.title }}{% endblock %}
+{% block description %}{{ item.summary|truncate(155) if item.summary else item.title ~ ' - professionally refurbished and tested.' }}{% endblock %}
+{% block og_description %}{{ item.summary|truncate(155) if item.summary else item.title }}{% endblock %}
 
 {% block og_image_tag %}
 {% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
@@ -64,13 +64,15 @@
 
         {% if item.description %}
         <div class="listing-description">
+            {# white-space: pre-wrap shows the description's own line breaks and
+               indents, so nothing else may sit inside this <p> - keep it one line. #}
             <p>{{ item.description }}</p>
         </div>
         {% endif %}
 
         {% if item.in_stock %}
-            <a class="buy-button" href="/?listing={{ item.slug }}">
-                View in the console &rarr;
+            <a class="buy-button" href="/play?listing={{ item.slug }}" data-cta="listing-buy">
+                Buy in the Game Boy &rarr;
             </a>
             <p class="buy-note">
                 Checkout runs through the Game Boy interface. Secure payment via Stripe.

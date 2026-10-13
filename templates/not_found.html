@@ -1,0 +1,24 @@
+{% extends "public_base.html" %}
+
+{% block title %}Page not found | Gameboy Retreat{% endblock %}
+
+{% block structured_data %}<meta name="robots" content="noindex">{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+    <p class="hero-eyebrow">Error 404</p>
+    <h1>Nothing here.</h1>
+    <p>
+        That page does not exist, or it has moved. If you followed a link to a
+        console, it may have sold.
+    </p>
+    <div class="hero-actions" style="margin-top: 28px;">
+        <a class="btn-primary" href="/shop">Browse the shop &rarr;</a>
+        <a class="btn-console" href="/play" data-cta="404">
+            <span class="btn-console-icon" aria-hidden="true">▲<br>◄ ● ►<br>▼</span>
+            <span><strong>Browse in a working Game Boy</strong>
+                  <small>Our shop, running inside the real thing</small></span>
+        </a>
+    </div>
+</div>
+{% endblock %}

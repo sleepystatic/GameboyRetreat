@@ -158,3 +158,314 @@ textarea { resize: vertical; }
 }
 
 .btn-secondary:hover { color: var(--text); }
+
+/* ---------- photo editor (new + edit form) ---------- */
+
+/* Matches the other field labels (.admin-form label > span) */
+.field-label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--green);
+    margin-bottom: 6px;
+}
+
+.hint { font-size: 11px; color: var(--muted); margin: 0 0 10px; }
+
+.photo-grid {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+}
+
+/* The template renders the grid with no whitespace when there are no tiles,
+   so :empty is reliable here. */
+.photo-grid:empty,
+.photo-empty { display: none; }
+.photo-grid:empty + .photo-empty { display: block; }
+
+.photo-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.photo-grid.is-sortable .photo-tile { cursor: grab; }
+.photo-tile.is-cover { border-color: var(--green); }
+.photo-tile.is-dragging { opacity: .35; border-style: dashed; }
+
+.photo-frame {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.photo-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+.photo-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    background: rgba(10, 10, 10, .85);
+    color: var(--text);
+}
+
+.photo-tile.is-cover .photo-badge { background: var(--green); color: var(--ink); }
+
+.photo-controls { display: flex; align-items: center; gap: 4px; }
+
+/* The arrows need JavaScript, so they only show once it is running. */
+.photo-controls button { display: none; }
+
+.photo-grid.is-sortable .photo-controls button {
+    display: inline-block;
+    width: 30px;
+    height: 26px;
+    padding: 0;
+    font-size: 11px;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    cursor: pointer;
+}
+
+.photo-grid.is-sortable .photo-controls button:hover:not(:disabled),
+.photo-grid.is-sortable .photo-controls button:focus-visible {
+    color: var(--green);
+    border-color: var(--green);
+    outline: none;
+}
+
+.photo-grid.is-sortable .photo-controls button:disabled { opacity: .3; cursor: default; }
+
+/* Overrides the stacked .admin-form label layout */
+.admin-form .photo-keep {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.photo-keep input { width: auto; margin: 0; }
+
+.photo-path {
+    font-size: 10px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Unticked tiles read as "will be removed on save" */
+.photo-tile:has(input[name="keep_images"]:not(:checked)) .photo-frame { opacity: .3; }
+.photo-tile:has(input[name="keep_images"]:not(:checked)) .photo-path { text-decoration: line-through; }
+
+/* Tiles without a picture to show. is-broken: a stored path whose file is gone,
+   or a new photo whose preview failed (it still uploads). is-loading: the server
+   is making a preview of a file the browser cannot draw (HEIC outside Safari).
+   is-unreadable: the server cannot read it either, so it would fail to upload. */
+.photo-tile.is-broken .photo-frame img,
+.photo-tile.is-loading .photo-frame img,
+.photo-tile.is-unreadable .photo-frame img { visibility: hidden; }
+
+.photo-tile.is-broken .photo-frame::after,
+.photo-tile.is-loading .photo-frame::after,
+.photo-tile.is-unreadable .photo-frame::after {
+    content: 'Missing file';
+    position: absolute;
+    padding: 0 8px;
+    font-size: 11px;
+    text-align: center;
+    color: var(--red);
+}
+
+.photo-tile.is-new.is-broken .photo-frame::after { content: 'No preview'; color: var(--muted); }
+.photo-tile.is-loading .photo-frame::after { content: 'Making preview…'; color: var(--muted); }
+.photo-tile.is-unreadable .photo-frame::after { content: "Can't read this file - it won't upload"; }
+
+/* ---------- inventory row flags + delete ---------- */
+
+.flag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 10px;
+    letter-spacing: .5px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    vertical-align: middle;
+}
+
+.flag-warn { border-color: var(--amber); color: var(--amber); }
+
+.cell-actions { white-space: nowrap; }
+.cell-actions a { margin-right: 10px; }
+
+.delete-form { display: inline; }
+
+/* `button.` so these outrank `button[type="submit"]` above, which otherwise
+   painted every Delete button solid green. */
+button.btn-danger {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12px;
+    font-weight: normal;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+
+button.btn-danger:hover:not(:disabled) { background: transparent; color: var(--red); border-color: var(--red); }
+button.btn-danger:disabled { opacity: .35; cursor: default; }
+
+/* ---------- categories ---------- */
+
+.category-list {
+    list-style: none;
+    margin: 0 0 28px;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.category-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 14px;
+    padding: 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+}
+
+.category-move { display: flex; flex-direction: column; gap: 4px; grid-row: span 2; }
+
+.category-move button,
+button.btn-small {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.category-move button { width: 30px; height: 26px; padding: 0; }
+button.btn-small { padding: 8px 12px; }
+
+.category-move button:hover:not(:disabled),
+button.btn-small:hover { color: var(--green); border-color: var(--green); }
+.category-move button:disabled { opacity: .3; cursor: default; }
+
+.category-edit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.category-edit label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 150px; }
+
+.category-edit label span {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--green);
+}
+
+.category-meta {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.category-meta code { color: var(--text); background: var(--panel-2); padding: 1px 6px; }
+.category-meta .delete-form { margin-left: auto; }
+
+.category-new { padding: 16px; border: 1px dashed var(--line); }
+
+/* ---------- analytics ---------- */
+
+.range { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+.range a {
+    font-size: 12px;
+    padding: 5px 11px;
+    border: 1px solid var(--line);
+    text-decoration: none;
+    color: var(--muted);
+}
+.range a.on { color: var(--green); border-color: var(--green); }
+
+.stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+}
+.stat-row .stat {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+}
+.stat-row .stat span {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--green);
+}
+.stat-row .stat strong { display: block; font-size: 22px; margin-top: 4px; }
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 16px 18px;
+    margin-bottom: 18px;
+}
+.panel h2 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--green);
+}
+.panel .admin-table { margin-top: 8px; }
+
+.two-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 18px;
+}
+.two-col .panel { margin-bottom: 18px; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.bar-cell { width: 45%; }
+.bar {
+    display: block;
+    height: 8px;
+    min-width: 2px;
+    background: var(--green);
+    opacity: .75;
+}
+
+.funnel td:first-child { white-space: nowrap; }
+
+.ref-examples { margin: 8px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.9; }

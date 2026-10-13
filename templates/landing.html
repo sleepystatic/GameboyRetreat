@@ -1,0 +1,224 @@
+{% extends "public_base.html" %}
+
+{% block title %}Gameboy Retreat — Refurbished Game Boy & Retro Handhelds{% endblock %}
+{% block og_title %}Refurbished Game Boy & Retro Handhelds{% endblock %}
+{% block description %}Hand-restored Game Boy, Game Boy Color, Game Boy Advance and Nintendo DS handhelds. Cleaned, rehoused and repaired to work like new. 30-day warranty. Send in your own console for the same treatment.{% endblock %}
+{% block og_description %}Hand-restored retro handhelds, backed by a 30-day warranty. Or send in your own.{% endblock %}
+
+{% block content %}
+
+<section class="hero">
+    <div class="hero-copy">
+        <p class="hero-eyebrow">Stockton, CA · Shipping nationwide</p>
+        <h1>Dead handhelds,<br>brought back properly.</h1>
+        <p class="hero-lede">
+            Every console here started as a broken unit someone gave up on. Stripped,
+            cleaned, rehoused and repaired by hand until it plays like it did new —
+            then tested through a real session before it ships.
+        </p>
+        <div class="hero-actions">
+            <a class="btn-primary" href="/shop">
+                {% if available_count %}Shop {{ available_count }} console{{ '' if available_count == 1 else 's' }}{% else %}Visit the shop{% endif %} &rarr;
+            </a>
+            <a class="btn-console" href="/play" data-cta="console">
+                <span class="btn-console-icon" aria-hidden="true">▲<br>◄ ● ►<br>▼</span>
+                <span>
+                    <strong>Browse in a working Game Boy</strong>
+                    <small>Our shop, running inside the real thing</small>
+                </span>
+            </a>
+        </div>
+        <ul class="hero-trust">
+            <li>30-day warranty</li>
+            <li>Tested before shipping</li>
+            <li>Replies within 24 hours</li>
+        </ul>
+    </div>
+
+    {# The Game Boy shop playing itself, from live data. The whole thing is one
+       link into /play; hero-demo.js presses the buttons and points the link at
+       whichever console is on screen. Without JavaScript it shows the main menu. #}
+    <a class="hero-console" href="/play" data-cta="hero-demo"
+       aria-label="Open the shop inside a working Game Boy">
+        <div class="demo-device" aria-hidden="true">
+            <div class="demo-screen">
+                <ul class="demo-menu">
+                    <li class="is-active">Shop</li>
+                    <li>Cart</li>
+                    <li>Sell To Us</li>
+                    <li>Notify Me</li>
+                    <li>About</li>
+                </ul>
+            </div>
+            <div class="demo-body">
+                <img class="demo-shell" src="{{ url_for('static', filename='gbasp.png') }}"
+                     alt="" width="800" height="600" draggable="false">
+            </div>
+            <span class="demo-press demo-down"></span>
+            <span class="demo-press demo-a"></span>
+            <span class="demo-hint">Press to play &#9654;</span>
+        </div>
+        <p class="demo-caption">
+            <strong>The whole shop runs inside a working Game Boy.</strong>
+            D-pad to browse, A to buy.
+        </p>
+    </a>
+    <script id="hero-demo-data" type="application/json">{{ hero_demo|tojson }}</script>
+    <script src="{{ url_for('static', filename='hero-demo.js') }}" defer></script>
+</section>
+
+{% if featured %}
+<section class="band">
+    <div class="band-head">
+        <h2>Ready to ship</h2>
+        <a href="/shop">See everything &rarr;</a>
+    </div>
+    <ul class="listing-grid">
+        {% for item in featured %}
+        <li class="listing-card">
+            <a href="/listing/{{ item.slug }}">
+                <div class="card-media">
+                    {% if item.images %}
+                        <img src="{{ item.images[0] }}" alt="{{ item.title }}" loading="lazy">
+                    {% else %}
+                        <div class="card-media-empty">No photo</div>
+                    {% endif %}
+                    <span class="stock-badge">AVAILABLE</span>
+                </div>
+                <div class="card-body">
+                    <h3>{{ item.title }}</h3>
+                    <p class="card-price">${{ '%.2f'|format(item.price) }}</p>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="band">
+    <div class="band-head"><h2>The restoration process</h2></div>
+    <p class="band-lede">
+        Most listings that say refurbished mean wiped with a cloth. Here is what
+        actually happens, on every single unit.
+    </p>
+    <ol class="process">
+        <li><span class="step">01</span>
+            <h3>Fully stripped</h3>
+            <p>Board out of the shell. Nothing gets cleaned around.</p></li>
+        <li><span class="step">02</span>
+            <h3>Deep cleaned</h3>
+            <p>Board cleaned properly and corrosion treated at the battery terminals
+               before it eats the traces underneath.</p></li>
+        <li><span class="step">03</span>
+            <h3>Rehoused</h3>
+            <p>New shell, new buttons, new membranes. It should feel new, not just
+               look it.</p></li>
+        <li><span class="step">04</span>
+            <h3>Faults repaired</h3>
+            <p>Screens, audio, charge ports — actually fixed, not worked around or
+               disclosed away in the listing.</p></li>
+        <li><span class="step">05</span>
+            <h3>Played, then shipped</h3>
+            <p>A real session on real hardware. If it would annoy me, it does not go
+               out.</p></li>
+    </ol>
+</section>
+
+{% if review_profiles %}
+<section class="band">
+    <div class="band-head"><h2>Where I sell, and what people say</h2></div>
+    <p class="band-lede">
+        I have been doing this on the marketplaces for years. Every rating below is
+        public &mdash; click through and read them yourself.
+    </p>
+    <ul class="review-grid">
+        {% for p in review_profiles %}
+        <li class="review-card">
+            <a href="{{ p.url }}" target="_blank" rel="noopener nofollow">
+                <span class="review-platform">{{ p.platform }}</span>
+                {% if p.rating %}
+                <span class="review-rating">
+                    <span class="stars" aria-hidden="true">★★★★★</span>
+                    {{ p.rating }}
+                    {% if p.sales %}<span class="review-sales">· {{ p.sales }} sales</span>{% endif %}
+                </span>
+                {% endif %}
+                {% if p.note %}<span class="review-note">{{ p.note }}</span>{% endif %}
+                <span class="review-link">View profile &nearr;</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    <p class="review-foot">
+        Buying direct here costs you the same and keeps the marketplace fee with the
+        person who did the work &mdash; plus everything on this site carries the
+        30-day warranty.
+    </p>
+</section>
+{% endif %}
+
+<section class="band">
+    <div class="band-head"><h2>Already own one?</h2></div>
+    <div class="service-grid">
+        <div class="service-card">
+            <h3>Send it in</h3>
+            <p>Post me the console you already have and it gets the same treatment —
+               new shell, full clean, screen and charge-port upgrades, faults repaired.
+               Cheaper than buying a restored one, because you already own the hardware.</p>
+            <a href="/shop#mod-services">Mod my console &rarr;</a>
+        </div>
+        <div class="service-card">
+            <h3>Learn to do it</h3>
+            <p>One-to-one over Zoom, screen shared both ways, working on whatever
+               console you want to learn on. Shell swaps, backlight and IPS installs,
+               USB-C conversions.</p>
+            <a href="/shop#lessons">Book a session &rarr;</a>
+        </div>
+        <div class="service-card">
+            <h3>Sell it to me</h3>
+            <p>Broken, yellowed, sitting in a drawer — I buy handhelds in any state and
+               pay fairly for them. Tell me what you have and you get an offer, not a
+               lowball.</p>
+            <a href="/play" data-cta="sell">Get an offer &rarr;</a>
+        </div>
+    </div>
+</section>
+
+{% if services %}
+<section class="band">
+    <div class="band-head">
+        <h2>Services &amp; lessons</h2>
+        <a href="/shop">See all &rarr;</a>
+    </div>
+    <ul class="listing-grid">
+        {% for item in services %}
+        <li class="listing-card">
+            <a href="/listing/{{ item.slug }}">
+                <div class="card-body">
+                    <h3>{{ item.title }}</h3>
+                    <p class="card-price">${{ '%.2f'|format(item.price) }}</p>
+                    <p class="card-note">{{ item.summary|truncate(90, end='…') }}</p>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="band console-pitch">
+    <h2>Or browse the whole shop inside a Game Boy</h2>
+    <p>
+        The entire store runs on a working Game Boy Advance. D-pad to move, A to
+        select. On a phone, turn it sideways. It is not a gimmick bolted on the
+        side — it is the actual shop, cart and checkout included.
+    </p>
+    <a class="btn-console large" href="/play" data-cta="console-footer">
+        <span class="btn-console-icon" aria-hidden="true">▲<br>◄ ● ►<br>▼</span>
+        <span><strong>Browse in a working Game Boy</strong>
+              <small>Takes about three seconds to get the hang of</small></span>
+    </a>
+</section>
+
+{% endblock %}

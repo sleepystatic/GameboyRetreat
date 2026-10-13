@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Categories | Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+<header class="admin-header">
+    <h1>Categories</h1>
+    <nav>
+        <a href="/admin/listings">&larr; Inventory</a>
+        <a href="/admin/logout">Log out</a>
+    </nav>
+</header>
+
+<main class="admin-main narrow">
+    {% if errors %}
+    <div class="notice error">
+        <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <p class="hint">
+        This order is the order of the sections on the shop page and of the Game
+        Boy's shop menu. The Game Boy uses the shorter menu name where one is set.
+        A category can only be deleted once it has no listings, hidden ones included.
+    </p>
+
+    <ol class="category-list">
+        {% for cat in categories %}
+        <li class="category-row">
+            <form method="post" action="/admin/categories/{{ cat.id }}/move" class="category-move">
+                <button name="direction" value="up" title="Move up"
+                        aria-label="Move {{ cat.label }} up" {{ 'disabled' if loop.first else '' }}>&#9650;</button>
+                <button name="direction" value="down" title="Move down"
+                        aria-label="Move {{ cat.label }} down" {{ 'disabled' if loop.last else '' }}>&#9660;</button>
+            </form>
+
+            <form method="post" action="/admin/categories/{{ cat.id }}/update" class="category-edit">
+                <label>
+                    <span>Name</span>
+                    <input type="text" name="label" value="{{ cat.label }}" required>
+                </label>
+                <label>
+                    <span>Game Boy menu</span>
+                    <input type="text" name="menu_label" value="{{ cat.menu_label or '' }}"
+                           placeholder="Same as name">
+                </label>
+                <button class="btn-small">Save</button>
+            </form>
+
+            <div class="category-meta">
+                <code title="Permanent - listings, shop links and analytics use it">{{ cat.slug }}</code>
+                <span>{{ cat.listings }} listing{{ '' if cat.listings == 1 else 's' }}</span>
+                <form method="post" action="/admin/categories/{{ cat.id }}/delete"
+                      class="delete-form category-delete" data-label="{{ cat.label }}">
+                    <button class="btn-danger" {{ 'disabled' if cat.listings else '' }}
+                            title="{{ 'Move or delete its listings first' if cat.listings else 'Delete this category' }}">Delete</button>
+                </form>
+            </div>
+        </li>
+        {% endfor %}
+    </ol>
+
+    <form method="post" action="/admin/categories" class="admin-form category-new">
+        <span class="field-label">New category</span>
+        <div class="field-row">
+            <label>
+                <span>Name</span>
+                <input type="text" name="label" required placeholder="Game Boy Pocket"
+                       value="{{ form.label if form else '' }}">
+            </label>
+            <label>
+                <span>Game Boy menu (optional)</span>
+                <input type="text" name="menu_label" placeholder="Same as name"
+                       value="{{ form.menu_label if form else '' }}">
+            </label>
+        </div>
+        <small>New categories go just above the services and lessons. Use the arrows to move one.</small>
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">Add Category</button>
+        </div>
+    </form>
+</main>
+
+<script>
+    document.querySelectorAll('.category-delete').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (!confirm('Delete the "' + form.dataset.label + '" category?')) e.preventDefault();
+        });
+    });
+</script>
+</body>
+</html>

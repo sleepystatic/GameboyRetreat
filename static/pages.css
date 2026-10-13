@@ -34,7 +34,7 @@ img { max-width: 100%; display: block; }
 @font-face {
     font-family: 'GameboyFont';
     src: url('/static/fonts/pixel-font.ttf') format('truetype');
-    font-display: swap;
+    font-display: optional;
 }
 
 /* ---------- header / footer ---------- */
@@ -67,6 +67,448 @@ img { max-width: 100%; display: block; }
     margin: 0 auto;
     padding: 32px 24px 64px;
 }
+
+/* ============================================================
+   LANDING PAGE
+   ============================================================ */
+
+/* Copy on the left, the demo Game Boy on the right; stacked on small screens. */
+.hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 36px 56px;
+    padding: 48px 0 40px;
+    border-bottom: 1px solid var(--line);
+}
+
+.hero-copy { min-width: 0; }
+
+@media (max-width: 780px) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
+    .hero-console { justify-self: center; }
+}
+
+.hero-eyebrow {
+    margin: 0 0 14px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--green-dim);
+}
+
+.hero h1 {
+    font-family: 'GameboyFont', monospace;
+    font-size: clamp(30px, 6vw, 52px);
+    line-height: 1.15;
+    color: var(--green);
+    margin: 0 0 20px;
+}
+
+.hero-lede {
+    max-width: 58ch;
+    font-size: 15px;
+    color: var(--muted);
+    margin: 0 0 30px;
+}
+
+.hero-actions {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: stretch;
+    margin-bottom: 26px;
+}
+
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    background: var(--green);
+    color: #0a0a0a;
+    font-weight: bold;
+    text-decoration: none;
+    padding: 16px 26px;
+    border: 2px solid var(--green);
+    font-size: 15px;
+}
+
+.btn-primary:hover { background: #51cf66; border-color: #51cf66; }
+
+/* The console CTA is deliberately not styled as a plain button - it should read
+   as a doorway into something different, not a second identical action. */
+.btn-console {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    text-decoration: none;
+    color: var(--text);
+    background: var(--panel);
+    border: 2px solid var(--line);
+    padding: 12px 22px 12px 16px;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.btn-console:hover { border-color: var(--green); background: var(--panel-2); }
+.btn-console strong { display: block; font-size: 14px; color: var(--green); }
+.btn-console small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.btn-console-icon {
+    font-size: 9px;
+    line-height: 1.15;
+    letter-spacing: 1px;
+    color: var(--green-dim);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.btn-console.large { padding: 18px 30px 18px 22px; }
+.btn-console.large strong { font-size: 16px; }
+
+.hero-trust {
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.hero-trust li::before { content: '✓ '; color: var(--green); }
+
+/* ---------- hero demo Game Boy ----------
+   Positions are percentages of the SP's body inside gbasp.png: 297 x 553
+   artwork pixels starting at 252,28 on its 800 x 600 canvas. Measured from the
+   artwork - the transparent screen opening is 216 x 143 at 295,76 - and the
+   D-pad and A centres match the /play button zones in style.css. */
+
+.hero-console {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: 250px;
+    text-decoration: none;
+    color: var(--muted);
+}
+
+.hero-console:focus-visible { outline: 2px solid var(--green); outline-offset: 8px; }
+
+.demo-device {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 297 / 553;
+    isolation: isolate;             /* keeps the shadow's z-index: -1 inside the device */
+}
+
+/* A soft floor shadow. Not a filter on the artwork: that would also cast a
+   shadow into the transparent screen opening. */
+.demo-device::after {
+    content: '';
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    bottom: -4%;
+    height: 6%;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .7), transparent 70%);
+    z-index: -1;
+}
+
+/* The screen sits behind the artwork, 1px larger than the opening on every
+   side, so the bezel frames it. It is also the size container: the cqw units
+   below are percentages of its width, so the text scales with the console. */
+.demo-screen {
+    position: absolute;
+    left: 14.141%;
+    top: 8.499%;
+    width: 73.401%;
+    height: 26.221%;
+    overflow: hidden;
+    scroll-behavior: smooth;
+    background: #b2f2bb;
+    color: #222;
+    font-family: monospace;
+    line-height: 1.2;
+    container-type: inline-size;
+}
+
+/* The artwork's canvas is far wider than the SP itself; this box crops it to
+   the console so its transparent margins cannot widen the page. */
+.demo-body {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.demo-shell {
+    position: absolute;
+    left: -84.848%;
+    top: -5.063%;
+    width: 269.360%;
+    max-width: none;                /* overrides the global img { max-width: 100% } */
+    height: auto;
+    user-select: none;
+}
+
+/* Sizes copy the real menu (16px text, 6px padding on a 218px screen), with
+   px fallbacks for browsers without container units. */
+.demo-menu {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+    font-size: 7.339cqw;
+}
+
+.demo-menu li {
+    padding: 4px;
+    padding: 2.752cqw;
+    overflow-wrap: anywhere;        /* long titles wrap, as in the real menu */
+}
+
+.demo-menu li.is-active { background: #444; color: #fff; }
+.demo-menu.is-message { padding-top: 9cqw; text-align: center; }
+.demo-menu .meta { float: right; margin-left: 4cqw; font-size: .85em; opacity: .8; }
+.demo-menu .is-empty .meta { opacity: .45; }
+.demo-menu .is-out .meta,
+.demo-menu .icon { color: #a33; opacity: 1; }
+.demo-menu .icon { font-weight: bold; margin-right: 2cqw; }
+.demo-menu .is-out.is-active .meta,
+.demo-menu .is-out.is-active .icon { color: #f99; }
+.demo-menu .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-menu .photo { text-align: center; padding: 1cqw; }
+.demo-menu .photo img {
+    display: inline-block;
+    max-height: 32cqw;              /* with a one-line title and the price, fits the screen */
+    max-width: 100%;
+    object-fit: contain;
+    border: 1px solid #444;
+    background: #222;
+}
+.demo-menu .notice { text-align: center; }
+
+/* Ghost presses: the D-pad and A light up as the demo uses them. */
+.demo-press {
+    position: absolute;
+    width: 11.448%;                 /* about 34 artwork pixels */
+    aspect-ratio: 1;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(178, 242, 187, .95) 0%,
+                rgba(178, 242, 187, .45) 40%, transparent 70%);
+    opacity: 0;
+    transition: opacity .1s ease;
+    pointer-events: none;
+}
+
+.demo-press.is-pressed { opacity: 1; }
+.demo-down { left: 26.599%; top: 74.684%; }
+.demo-a    { left: 82.828%; top: 68.716%; }
+
+/* "Press to play" sits on the hinge. Shown on hover or keyboard focus, and
+   always on touch screens, which have no hover. */
+.demo-hint {
+    position: absolute;
+    left: 50%;
+    top: 49.186%;
+    transform: translate(-50%, -50%);
+    padding: 3px 10px;
+    background: var(--green);
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .15s ease;
+    pointer-events: none;
+}
+
+.hero-console:hover .demo-hint,
+.hero-console:focus-visible .demo-hint { opacity: 1; }
+
+@media (hover: none) { .demo-hint { opacity: 1; } }
+
+.demo-caption {
+    margin: 0;
+    max-width: 250px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.demo-caption strong { display: block; color: var(--green); font-size: 13px; }
+
+@media (max-width: 780px) {
+    .hero-console { width: 210px; }
+}
+
+/* ---------- bands ---------- */
+
+.band { padding: 40px 0; border-bottom: 1px solid var(--line); }
+.band:last-of-type { border-bottom: none; }
+
+.band-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.band-head h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--green);
+    margin: 0;
+}
+
+.band-head a { font-size: 13px; text-decoration: none; }
+.band-head a:hover { text-decoration: underline; }
+
+.band-lede { max-width: 60ch; color: var(--muted); margin: -6px 0 24px; }
+
+/* ---------- process ---------- */
+
+.process {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.process li {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--green-dim);
+    padding: 16px;
+}
+
+.process .step {
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--green-dim);
+}
+
+.process h3 { font-size: 14px; margin: 6px 0 6px; color: var(--text); }
+.process p { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* ---------- marketplace reviews ---------- */
+
+.review-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 18px;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.review-card a {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    height: 100%;
+    padding: 18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color .15s ease;
+}
+
+.review-card a:hover { border-color: var(--green); }
+
+.review-platform {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--green-dim);
+}
+
+.review-rating {
+    font-size: 19px;
+    font-weight: bold;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.review-rating .stars { color: var(--green); font-size: 14px; letter-spacing: 1px; }
+.review-sales { font-size: 12px; font-weight: normal; color: var(--muted); }
+.review-note { font-size: 12px; color: var(--muted); flex: 1; }
+
+.review-link {
+    font-size: 12px;
+    color: var(--green);
+    margin-top: 4px;
+}
+
+.review-foot {
+    max-width: 60ch;
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0;
+}
+
+/* ---------- services ---------- */
+
+.service-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.service-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.service-card h3 {
+    font-family: 'GameboyFont', monospace;
+    font-size: 17px;
+    color: var(--green);
+    margin: 0 0 10px;
+}
+
+.service-card p { margin: 0 0 16px; font-size: 13px; color: var(--muted); flex: 1; }
+.service-card a { font-size: 13px; text-decoration: none; font-weight: bold; }
+.service-card a:hover { text-decoration: underline; }
+
+.card-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+/* ---------- closing console pitch ---------- */
+
+.console-pitch { text-align: center; padding: 48px 0 8px; }
+
+.console-pitch h2 {
+    font-family: 'GameboyFont', monospace;
+    font-size: clamp(18px, 3.4vw, 26px);
+    color: var(--green);
+    margin: 0 0 14px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.console-pitch p {
+    max-width: 56ch;
+    margin: 0 auto 24px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.console-pitch .btn-console { text-align: left; }
 
 /* ---------- newsletter signup ---------- */
 
@@ -321,7 +763,15 @@ img { max-width: 100%; display: block; }
 .listing-stock.out-of-stock { color: var(--red); }
 
 .listing-description { color: var(--muted); margin-bottom: 24px; }
-.listing-description p { margin: 0; }
+
+/* Shown as typed in the admin panel: blank lines are paragraph breaks and
+   leading spaces indent. pre-wrap still wraps long lines to the column. */
+.listing-description p {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    tab-size: 4;
+}
 
 .buy-button {
     display: inline-block;
@@ -365,3 +815,26 @@ img { max-width: 100%; display: block; }
     padding-bottom: 8px;
     margin: 0 0 20px;
 }
+
+/* ---------- long-form text (privacy policy) ---------- */
+
+.prose { max-width: 68ch; }
+.prose h1 {
+    font-family: 'GameboyFont', monospace;
+    font-size: 30px;
+    color: var(--green);
+    margin: 0 0 6px;
+}
+.prose h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--green);
+    margin: 34px 0 10px;
+}
+.prose h3 { font-size: 14px; margin: 20px 0 6px; color: var(--text); }
+.prose p, .prose li { color: var(--muted); font-size: 14px; }
+.prose ul { padding-left: 20px; }
+.prose li { margin-bottom: 4px; }
+.prose strong { color: var(--text); }
+.prose .muted { font-size: 12px; margin: 0 0 24px; }

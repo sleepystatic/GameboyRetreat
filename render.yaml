@@ -1,20 +1,104 @@
+# Render Blueprint - gameboyretreat.com (the storefront) only.
+#
+# The operations app is NOT here. It is a static site on Vercel at
+# ops.gameboyretreat.com, served from the ops/ directory and configured by
+# ops/vercel.json. It talks to Supabase directly and needs no backend, so it
+# has no business being a Render service.
+#
+# Values are marked `sync: false`, meaning Render prompts for them rather than
+# storing secrets in the repo. If this service was created through the
+# dashboard rather than as a Blueprint, Render ignores this file - it is then
+# documentation, and the dashboard remains the source of truth.
+
 services:
   - type: web
     name: gameboyretreat
-    env: python
+    runtime: python
+    plan: free
+    region: oregon
+
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -c gunicorn.conf.py app:app
+
+    # 2 workers x DB_POOL_MAX(8) = 16 connections at most. Keep that under the
+    # Supabase pooler's client limit. Raise workers only alongside the pool.
+    startCommand: >-
+      gunicorn app:app
+      --bind 0.0.0.0:$PORT
+      --workers 2
+      --threads 4
+      --timeout 60
+      --graceful-timeout 30
+      --access-logfile -
+      --error-logfile -
+
+    # Liveness only - it does not touch the database on purpose. A failing probe
+    # makes Render restart the service, which cannot fix a sleeping Supabase and
+    # would take the static pages down too. /health/db is the dependency check.
     healthCheckPath: /health
+
+    autoDeploy: true
+
     envVars:
+      # --- database -------------------------------------------------------
+      # Supabase SESSION pooler string (port 5432), not the direct
+      # db.<ref>.supabase.co host - that one is IPv6-only and will not resolve.
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_POOL_MAX
+        value: "8"
+      - key: DB_POOL_MIN
+        value: "1"
+
+      # --- flask ----------------------------------------------------------
+      # REQUIRED. Without it the app generates a random key per process and
+      # admin logins break on every restart. Never set it to a guessable value:
+      # this repository is public.
+      - key: SECRET_KEY
+        generateValue: true
+      # Canonical origin for canonical tags, the sitemap and Stripe return URLs.
+      # Stops gameboyretreat.onrender.com being indexed as a duplicate.
+      - key: SITE_URL
+        value: https://gameboyretreat.com
+      # Google Search Console "HTML tag" verification token (content="..." only).
+      # Leave empty if verifying by DNS instead.
+      - key: GOOGLE_SITE_VERIFICATION
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+
+      # --- stripe ---------------------------------------------------------
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
+      # Must match the signing secret of the webhook destination that has
+      # checkout.session.completed AND checkout.session.expired enabled.
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: ADMIN_EMAIL
+
+      # --- email (Resend) -------------------------------------------------
+      - key: RESEND_API_KEY
         sync: false
-      - key: GMAIL_USER
+      # Transactional, from the root domain.
+      - key: MAIL_FROM
+        value: Gameboy Retreat <orders@gameboyretreat.com>
+      # Marketing, from the subdomain, so complaints cannot damage the
+      # reputation that order confirmations depend on.
+      - key: MARKETING_FROM
+        value: Gameboy Retreat <hello@news.gameboyretreat.com>
+      - key: MAIL_RECIPIENT
         sync: false
-      - key: GMAIL_APP_PASSWORD
+      - key: RESEND_AUDIENCE_ID
         sync: false
+
+      # --- supabase storage (listing photos) ------------------------------
+      - key: SUPABASE_URL
+        value: https://tsfssgspkrwxcdjeyejp.supabase.co
+      # service_role key. Server-side only - it bypasses Row Level Security,
+      # so it must never reach the browser or the ops app.
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: listings

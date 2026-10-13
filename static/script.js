@@ -56,7 +56,7 @@ function setConsoleLayout(layout) {
         if (!container) return;
 
         // Breathing room so the shell never kisses the edge of the viewport
-        const MARGIN = 0.94;
+        const MARGIN = 0.75;
 
         const consoleType = container.getAttribute('data-console');
 
@@ -93,6 +93,23 @@ function setConsoleLayout(layout) {
     if (container) {
         observer.observe(container, { attributes: true, attributeFilter: ['data-console'] });
     }
+
+    // Scale now rather than at DOMContentLoaded, which waits on Stripe and can land after the shell is on screen.
+    applyMobileScale();
+})();
+
+// Reveal the console once its shell image has loaded (it starts hidden; see style.css).
+(function() {
+    const container = document.querySelector('.gameboy-container');
+    const shell = container && container.querySelector('.shell');
+    if (!shell) return;
+    const reveal = () => container.classList.add('is-ready');
+    if (shell.complete && shell.naturalWidth) {
+        reveal();
+    } else {
+        shell.addEventListener('load', reveal, { once: true });
+        shell.addEventListener('error', reveal, { once: true });
+    }
 })();
 
 // ============================================
@@ -115,14 +132,10 @@ const MENUS = {
         { label: 'About', action: 'menu:about-menu' },
         { label: 'Switch Console', action: 'switchConsole', desktopOnly: true },
     ],
+    // The categories are added by loadShopCategories() - they live in the
+    // database and are managed in admin > Categories.
     'shop-menu': [
         { label: 'Back', action: 'menu:main-menu' },
-        { label: 'Gameboy Color', action: 'category:gameboy-color' },
-        { label: 'Gameboy Advance', action: 'category:gameboy-advance' },
-        { label: 'Gameboy Advance SP', action: 'category:gameboy-advance-sp' },
-        { label: 'Nintendo DS Lite', action: 'category:nintendo-ds-lite' },
-        { label: 'Mod My Console', action: 'category:mod-services' },
-        { label: 'Modding Lessons', action: 'category:lessons' },
     ],
     'about-menu': [
         { label: 'Back', action: 'menu:main-menu' },
@@ -142,12 +155,15 @@ const MENUS = {
         { label: 'Response Time: Within 24 hours', info: true },
         { label: 'Back', action: 'menu:about-menu' },
     ],
+    // Summary only - the full policy lives at /privacy so there is one source of
+    // truth. Keep this in step with templates/privacy.html if either changes.
     'privacy-menu': [
-        { label: 'We collect minimal information: your email when you submit items to sell, '
-               + 'and shipping info during checkout (processed securely by Stripe). We never '
-               + 'sell your data. Emails are used only to respond to your inquiries. By using '
-               + 'this site, you agree to these terms. Questions? Contact us at '
-               + 't.bryan.dev@gmail.com', info: true },
+        { label: 'Orders: name, email and shipping address, to send your console. '
+               + 'Card details stay with Stripe. Selling to us: your email and item '
+               + 'details. Browsing: pages viewed and which site sent you, with no '
+               + 'name attached. Google Analytics is also used. Your data is never sold.',
+          info: true },
+        { label: 'Read Full Policy', action: 'external:/privacy' },
         { label: 'Back', action: 'menu:about-menu' },
     ],
     'sell-menu': [
@@ -185,6 +201,22 @@ function firstSelectableIndex(items) {
     return 0;
 }
 
+// Fill the shop menu with the categories the /play page embeds, in the order
+// set in admin > Categories. Safe to call again: it rebuilds from the embed.
+function loadShopCategories() {
+    let categories = [];
+    try {
+        const el = document.getElementById('shop-categories');
+        categories = JSON.parse(el ? el.textContent : '[]');
+    } catch (e) {
+        console.warn('Could not read the shop categories:', e);
+    }
+    MENUS['shop-menu'] = [
+        { label: 'Back', action: 'menu:main-menu' },
+        ...categories.map(c => ({ label: c.label, action: `category:${c.slug}` })),
+    ];
+}
+
 // Build the static menus into the screen from MENUS.
 function renderMenus() {
     const screen = document.querySelector('.screen');
@@ -200,9 +232,10 @@ function renderMenus() {
         items
             .filter(item => !(item.desktopOnly && !desktop))
             .forEach(item => {
+                // Category names are typed in the admin panel, so escape them.
                 const cls = item.info ? 'menu-item info' : 'menu-item';
-                const action = item.action ? ` data-action="${item.action}"` : '';
-                html.push(`<li class="${cls}"${action}>${item.label}</li>`);
+                const action = item.action ? ` data-action="${escapeHTML(item.action)}"` : '';
+                html.push(`<li class="${cls}"${action}>${escapeHTML(item.label)}</li>`);
             });
 
         html.push('</ul>');
@@ -237,6 +270,37 @@ function stockIcon(item) {
 function stockLabel(item) {
     if (item && item.status === 'coming_soon') return 'Coming Soon';
     return 'Out of Stock';
+}
+
+// Listing text is typed into the admin panel and lands in innerHTML templates,
+// where a stray "<" or "&" in a description would break the screen.
+function escapeHTML(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[ch]);
+}
+
+// How many of a category can actually be bought right now.
+function availableCount(category) {
+    return (listings[category] || []).filter(isAvailable).length;
+}
+
+// Hang a count on the right of each category row in the shop menu. Runs after
+// inventory loads, and again whenever stock might have changed.
+function decorateShopMenu() {
+    document.querySelectorAll('#shop-menu .menu-item[data-action^="category:"]')
+        .forEach(function (li) {
+            const category = li.getAttribute('data-action').slice(9);
+            const n = availableCount(category);
+
+            const existing = li.querySelector('.row-meta');
+            if (existing) existing.remove();
+
+            const meta = document.createElement('span');
+            meta.className = 'row-meta' + (n ? '' : ' row-meta-empty');
+            meta.textContent = n ? String(n) : '-';
+            li.appendChild(meta);
+        });
 }
 
 // Find a listing by the identity stored on a cart entry.
@@ -302,6 +366,7 @@ async function loadInventory() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Build the static menus from MENUS before anything queries the DOM for them.
+    loadShopCategories();
     renderMenus();
 
     // Free any abandoned checkout hold before reading stock, so availability is
@@ -310,6 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load inventory FIRST before allowing interaction
     await loadInventory();
+    decorateShopMenu();
 
     let currentMenu = document.querySelector('.menu.active-menu');
     let menuItems = currentMenu.querySelectorAll('.menu-item');
@@ -398,6 +464,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         cart.push(cartItem);
+        if (window.gbrTrack) window.gbrTrack('add_to_cart', { listing: item.slug || item.title });
         localStorage.setItem('gameboyCart', JSON.stringify(cart));
         showCartMessage();
     }
@@ -446,6 +513,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function handleCheckout() {
+        if (window.gbrTrack && cart.length) window.gbrTrack('checkout_start', { detail: String(cart.length) });
         if (cart.length === 0) {
             alert('Your cart is empty!');
             return;
@@ -472,7 +540,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ cart: cart }),
+                // Recorded against the order so you can compare how the two
+                // experiences actually convert, independent of any analytics
+                // script that an ad blocker might drop.
+                body: JSON.stringify(Object.assign(
+                    { cart: cart, surface: 'console' },
+                    window.gbrRef ? window.gbrRef() : {}
+                )),
             });
 
             const data = await response.json();
@@ -717,6 +791,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             })
                 .then(r => r.json())
                 .then(data => {
+                    if (data.ok && window.gbrTrack) window.gbrTrack('signup', { detail: 'console' });
                     flashMessage(
                         data.ok ? "You're on the list!" : 'Hmm...',
                         data.ok ? 'We will be in touch' : data.message,
@@ -974,21 +1049,37 @@ document.addEventListener('DOMContentLoaded', async () => {
             backText = 'Back to Cart';
         }
 
-        const currentImage = item.images[currentImageIndex] || item.images[0];
-        const imageCount = item.images.length;
+        // Count a view once per listing opened, not once per image arrow press.
+        const slug = item.slug || item.title;
+        if (renderGalleryItem.lastTracked !== slug) {
+            renderGalleryItem.lastTracked = slug;
+            if (window.gbrTrack) window.gbrTrack('listing_view', { listing: slug });
+        }
+
+        const images = item.images || [];
+        const currentImage = images[currentImageIndex] || images[0];
+        const imageCount = images.length;
 
         const imageNavHint = imageCount > 1
             ? `<div class="navigation-hint">Image ${currentImageIndex + 1}/${imageCount} - ←/→ to change</div>`
             : '';
 
+        // Services carry no photos, and a listing whose photos were removed has
+        // none either. Without this the template rendered <img src="undefined">.
+        const imageHTML = currentImage
+            ? `<img src="${currentImage}" alt="${escapeHTML(item.title)}" class="product-image">`
+            : `<div class="product-image no-image">${item.is_service ? 'Service' : 'No photo yet'}</div>`;
+
+        // The description row is white-space: pre-wrap (style.css), so it must
+        // hold nothing but the text itself - no whitespace from this template.
         currentMenu.innerHTML = `
-            <li class="menu-item gallery-title">${item.title}</li>
+            <li class="menu-item gallery-title">${escapeHTML(item.title)}</li>
             <li class="menu-item gallery-image active">
-                <img src="${currentImage}" alt="${item.title}" class="product-image">
+                ${imageHTML}
                 <div class="navigation-hint">↑/↓ navigate menu</div>
                 ${imageNavHint}
             </li>
-            <li class="menu-item gallery-description">${item.description}</li>
+            <li class="menu-item gallery-description">${escapeHTML(item.description)}</li>
             <li class="menu-item gallery-price">Price: $${item.price}</li>
             <li class="menu-item">Add to Cart</li>
             <li class="menu-item">${backText}</li>
@@ -1007,20 +1098,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentMenu.classList.remove('hidden');
         currentMenu.classList.add('active-menu');
 
+        if (window.gbrTrack) window.gbrTrack('category_view', { detail: category });
+
         const items = listings[category];
 
         let listingsHTML = `<li class="menu-item" data-action="back">Back</li>`;
 
         items.forEach((item, index) => {
             if (isAvailable(item)) {
+                // Services never run out, so a quantity would be meaningless.
+                const qty = item.is_service ? 'available' : `${item.stock} left`;
                 listingsHTML += `<li class="menu-item" data-listing-category="${category}" data-listing-index="${index}">
-                    ${item.title} - $${item.price}
+                    ${item.title}<span class="row-meta">$${item.price} &middot; ${qty}</span>
                 </li>`;
             } else {
                 listingsHTML += `<li class="menu-item out-of-stock">
                     <span class="stock-icon">${stockIcon(item)}</span>
-                    <span class="strikethrough">${item.title} - $${item.price}</span>
-                    <span class="stock-label">${stockLabel(item)}</span>
+                    <span class="strikethrough">${item.title}</span>
+                    <span class="row-meta">${stockLabel(item)}</span>
                 </li>`;
             }
         });
@@ -1083,6 +1178,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (menuItems.length > 0) {
         updateActivate(0);
     }
+
+    // /play?listing=<slug> - every product page's "Buy in the Game Boy" button
+    // links here. Open that exact listing rather than dropping the customer at
+    // the main menu, which is the moment they are most ready to buy.
+    (function openRequestedListing() {
+        const wanted = new URLSearchParams(window.location.search).get('listing');
+        if (!wanted) return;
+
+        for (const [category, items] of Object.entries(listings)) {
+            const index = items.findIndex(i => i.slug === wanted);
+            if (index === -1) continue;
+
+            // Land in the category first, so Back returns to the right list.
+            showCategoryListings(category, category);
+            inGallery = true;
+            viewingFromCart = false;
+            currentGalleryItems = items;
+            currentGalleryItems.forEach(i => i.category = category);
+            currentGalleryIndex = index;
+            currentImageIndex = 0;
+            renderGalleryItem();
+            return;
+        }
+        // Unknown or removed listing: the main menu is the right fallback.
+    })();
 });
 
 // ============================================

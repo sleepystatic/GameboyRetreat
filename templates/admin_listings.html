@@ -11,7 +11,9 @@
     <h1>Inventory</h1>
     <nav>
         <a href="/admin/listings/new" class="btn-primary">+ New Listing</a>
+        <a href="/admin/categories">Categories</a>
         <a href="/admin/dashboard">Orders</a>
+        <a href="/admin/analytics">Analytics</a>
         <a href="/admin/logout">Log out</a>
     </nav>
 </header>
@@ -50,7 +52,15 @@
                         <span class="no-photo">—</span>
                     {% endif %}
                 </td>
-                <td>{{ item.title }}</td>
+                <td>
+                    {{ item.title }}
+                    {% set dead = item.images_raw|length - item.images|length %}
+                    {% if dead > 0 %}
+                        <span class="flag flag-warn">{{ dead }} missing photo{{ '' if dead == 1 else 's' }}</span>
+                    {% elif not item.images and not item.is_service %}
+                        <span class="flag">no photos</span>
+                    {% endif %}
+                </td>
                 <td class="muted">{{ categories.get(item.category, item.category) }}</td>
                 <td>${{ '%.2f'|format(item.price) }}</td>
                 <td>
@@ -71,12 +81,50 @@
                         &mdash;
                     {% endif %}
                 </td>
-                <td><a href="/listing/{{ item.slug }}" target="_blank">View &nearr;</a></td>
+                <td class="cell-actions">
+                    <a href="/admin/listings/{{ item.id }}/edit">Edit</a>
+                    <a href="/listing/{{ item.slug }}" target="_blank" class="muted">View &nearr;</a>
+                    <form method="post" action="/admin/listings/{{ item.id }}/delete"
+                          class="delete-form"
+                          data-title="{{ item.title }}"
+                          data-held="{{ item.held }}">
+                        <button type="submit" class="btn-danger">Delete</button>
+                    </form>
+                </td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
     {% endif %}
 </main>
+
+<script>
+    // Deleting is permanent, so make the person type the title. A plain OK/Cancel
+    // dialog gets clicked through on autopilot; typing the name does not.
+    document.querySelectorAll('.delete-form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            var title = form.dataset.title;
+            var held = parseInt(form.dataset.held || '0', 10);
+
+            if (held > 0) {
+                e.preventDefault();
+                alert(held + ' of "' + title + '" is in someone\'s checkout right now. ' +
+                      'Set it to Hidden instead, or try again in a few minutes.');
+                return;
+            }
+
+            var typed = prompt(
+                'Permanently delete "' + title + '"?\n\n' +
+                'This removes the listing and its uploaded photos. Past orders keep ' +
+                'their own record and are not affected. This cannot be undone.\n\n' +
+                'Type the listing title to confirm:'
+            );
+            if (typed === null || typed.trim() !== title.trim()) {
+                e.preventDefault();
+                if (typed !== null) alert('Title did not match. Nothing was deleted.');
+            }
+        });
+    });
+</script>
 </body>
 </html>

@@ -31,3 +31,10 @@ submissions.db
 *.log
 app.log
 monitor.log
+# Listing photos live in Supabase Storage, uploaded through /admin/listings.
+# Nothing in here should ever be committed - the repo is public.
+static/images/
+
+# Session handoff notes - describe security history and business numbers.
+# Never commit: this repository is public.
+HANDOFF.md
