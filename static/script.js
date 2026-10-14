@@ -299,6 +299,7 @@ function decorateShopMenu() {
             const meta = document.createElement('span');
             meta.className = 'row-meta' + (n ? '' : ' row-meta-empty');
             meta.textContent = n ? String(n) : '-';
+            li.classList.add('row-split');
             li.appendChild(meta);
         });
 }
@@ -1104,19 +1105,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         let listingsHTML = `<li class="menu-item" data-action="back">Back</li>`;
 
+        // Title and price/quantity are separate spans in a row-split row (see
+        // style.css): the value sits beside a short title, and under a long one.
         items.forEach((item, index) => {
             if (isAvailable(item)) {
                 // Services never run out, so a quantity would be meaningless.
                 const qty = item.is_service ? 'available' : `${item.stock} left`;
-                listingsHTML += `<li class="menu-item" data-listing-category="${category}" data-listing-index="${index}">
-                    ${item.title}<span class="row-meta">$${item.price} &middot; ${qty}</span>
-                </li>`;
+                listingsHTML += `<li class="menu-item row-split" data-listing-category="${category}" data-listing-index="${index}"><span class="row-title">${escapeHTML(item.title)}</span><span class="row-meta">$${item.price} &middot; ${qty}</span></li>`;
             } else {
-                listingsHTML += `<li class="menu-item out-of-stock">
-                    <span class="stock-icon">${stockIcon(item)}</span>
-                    <span class="strikethrough">${item.title}</span>
-                    <span class="row-meta">${stockLabel(item)}</span>
-                </li>`;
+                const soon = item.status === 'coming_soon' ? ' coming-soon' : '';
+                listingsHTML += `<li class="menu-item out-of-stock row-split${soon}"><span class="row-title"><span class="stock-icon">${stockIcon(item)}</span><span class="strikethrough">${escapeHTML(item.title)}</span></span><span class="row-meta">${stockLabel(item)}</span></li>`;
             }
         });
 

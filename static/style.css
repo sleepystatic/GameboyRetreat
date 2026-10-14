@@ -528,6 +528,30 @@ body {
     background: #51cf66;
 }
 
+/* Exit to the regular site: the chat button's twin in the opposite corner.
+   Sizes step down with it in the media queries below. */
+.exit-icon {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 60px;
+    height: 60px;
+    background: #b2f2bb;
+    border: 3px solid #222;
+    color: #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.3);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.exit-icon:hover,
+.exit-icon:focus-visible { background: #51cf66; }
+.exit-icon:focus-visible { outline: 3px solid #b2f2bb; outline-offset: 3px; }
+.exit-icon svg { width: 28px; height: 28px; }
+
 .chat-box {
     position: fixed;
     bottom: 90px;
@@ -707,15 +731,29 @@ body {
     tab-size: 4;
 }
 
-/* Right-hand column inside a menu row: category counts, price + quantity.
-   Floated rather than flexed so the existing row layout is untouched. */
+/* Rows with a right-hand value: category counts, price + quantity. The row is
+   a wrapping flex line, so the value sits beside a title that leaves room for
+   it and drops to its own line, still right-aligned, under one that doesn't.
+   It used to float right after the title, which put it wherever a wrapped
+   title happened to end. */
+.menu-item.row-split {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 12px;
+    overflow-wrap: anywhere;
+}
+
 .menu-item .row-meta {
-    float: right;
-    margin-left: 12px;
+    margin-left: auto;
     font-size: 0.85em;
     opacity: 0.8;
     white-space: nowrap;
 }
+
+/* Keep the out-of-stock mark on the same line as its title. Specific enough to
+   beat `.menu-item.out-of-stock .strikethrough { display: block }` below. */
+.menu-item.row-split .row-title .strikethrough { display: inline; }
 
 .menu-item.active .row-meta { opacity: 1; }
 .menu-item .row-meta-empty { opacity: 0.45; }
@@ -795,6 +833,9 @@ body {
         font-size: 24px;
     }
 
+    .exit-icon { width: 50px; height: 50px; }
+    .exit-icon svg { width: 24px; height: 24px; }
+
     .controls-legend {
         font-size: 11px;
         gap: 15px;
@@ -846,6 +887,9 @@ body {
         bottom: 10px;
         right: 10px;
     }
+
+    .exit-icon { width: 40px; height: 40px; bottom: 10px; left: 10px; }
+    .exit-icon svg { width: 20px; height: 20px; }
 }
 
 /* ========================================

@@ -38,20 +38,14 @@
     // Listing titles are typed in the admin panel, so everything goes in as
     // textContent - never as HTML.
 
-    // rows: [{ text, meta, icon, strike, img, cls }]
+    // rows: [{ text, meta, icon, strike, img, cls }]. A row with a meta value
+    // is a row-split row like the real menu's: the value sits beside a short
+    // title and right-aligned under a long one.
     function draw(rows, active, menuClass) {
         menu.className = 'demo-menu' + (menuClass ? ' ' + menuClass : '');
         menu.replaceChildren(...rows.map(row => {
             const li = document.createElement('li');
             if (row.cls) li.className = row.cls;
-            if (row.meta != null) {
-                // First in the row so the float sits on the first line, as in
-                // the real menu.
-                const meta = document.createElement('span');
-                meta.className = 'meta';
-                meta.textContent = row.meta;
-                li.appendChild(meta);
-            }
             if (row.img) {
                 const img = document.createElement('img');
                 img.src = row.img;
@@ -59,15 +53,24 @@
                 li.appendChild(img);
                 return li;
             }
+            const title = document.createElement('span');
             if (row.icon) {
                 const icon = document.createElement('span');
                 icon.className = 'icon';
                 icon.textContent = row.icon;
-                li.appendChild(icon);
+                title.appendChild(icon);
             }
             const text = document.createElement(row.strike ? 's' : 'span');
             text.textContent = row.text;
-            li.appendChild(text);
+            title.appendChild(text);
+            li.appendChild(title);
+            if (row.meta != null) {
+                const meta = document.createElement('span');
+                meta.className = 'meta';
+                meta.textContent = row.meta;
+                li.appendChild(meta);
+                li.classList.add('row-split');
+            }
             return li;
         }));
         screen.scrollTop = 0;

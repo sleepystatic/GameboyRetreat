@@ -20,7 +20,10 @@
 
 body {
     margin: 0;
-    background: var(--ink);
+    background-color: var(--ink);
+    /* "Axiom" from transparenttextures.com - an 81px tile of faint light lines,
+       re-hosted here as the site asks rather than hotlinked. */
+    background-image: url('textures/axiom-pattern.png');
     color: var(--text);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     line-height: 1.6;
@@ -270,7 +273,16 @@ img { max-width: 100%; display: block; }
 
 .demo-menu li.is-active { background: #444; color: #fff; }
 .demo-menu.is-message { padding-top: 9cqw; text-align: center; }
-.demo-menu .meta { float: right; margin-left: 4cqw; font-size: .85em; opacity: .8; }
+/* Same layout as the real menu's row-split rows (style.css): the value sits
+   beside a short title and right-aligned under a long one. */
+.demo-menu li.row-split {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 1cqw 5.5cqw;               /* the real menu's 2px and 12px */
+}
+
+.demo-menu .meta { margin-left: auto; font-size: .85em; opacity: .8; white-space: nowrap; }
 .demo-menu .is-empty .meta { opacity: .45; }
 .demo-menu .is-out .meta,
 .demo-menu .icon { color: #a33; opacity: 1; }

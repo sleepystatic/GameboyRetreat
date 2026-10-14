@@ -215,7 +215,13 @@ def _ensure_pool():
     if db_pool is None:
         with _pool_lock:
             if db_pool is None:
-                db_pool = psycopg2.pool.SimpleConnectionPool(
+                # Threaded, not Simple: gunicorn runs several threads per worker
+                # (--threads in render.yaml) and they all share this pool.
+                # SimpleConnectionPool has no lock, so concurrent requests corrupt
+                # its bookkeeping until it reports itself exhausted - and the
+                # reset that follows closes connections other requests are still
+                # using, a checkout's stock hold included.
+                db_pool = psycopg2.pool.ThreadedConnectionPool(
                     DB_POOL_MIN, DB_POOL_MAX, DATABASE_URL
                 )
                 print("✅ Database connection pool created successfully")
