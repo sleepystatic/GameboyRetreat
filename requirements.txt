@@ -24,7 +24,7 @@ urllib3==2.3.0
 
 # Image processing for listing uploads.
 # pillow-heif adds HEIC/HEIF, which is what iPhones produce by default.
-Pillow==11.0.0
+Pillow==11.1.0
 pillow-heif==1.8.0
 
 # Config
