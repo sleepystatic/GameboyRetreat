@@ -1,0 +1,27 @@
+{#- Plain-text twin of order_shipped.html, for clients that show text. -#}
+GAMEBOY RETREAT
+
+IT'S ON ITS WAY!
+
+Good news{% if order.first_name %}, {{ order.first_name }}{% endif %}! Order {{ order.number }} shipped{% if order.shipped_on %} on {{ order.shipped_on }}{% endif %}.
+
+Carrier:  {{ order.carrier_name }}
+Tracking: {{ order.tracking_number }}
+{% if order.tracking_url %}Track it: {{ order.tracking_url }}
+{% endif -%}
+(Tracking can take up to a day to show its first scan.)
+
+In the box:
+{% for item in order['items'] -%}
+- {{ item.title }}{% if (item.quantity or 1) > 1 %} x{{ item.quantity }}{% endif %}
+{% endfor -%}
+{% if order.address_lines %}
+Shipping to:
+{% if order.name %}{{ order.name }}
+{% endif -%}
+{% for line in order.address_lines %}{{ line }}
+{% endfor -%}
+{% endif %}
+Something not right when it arrives? Reply to this email - every console is covered by our 30-day warranty.
+
+Gameboy Retreat - Stockton, CA - {{ site }}

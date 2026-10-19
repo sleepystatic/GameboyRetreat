@@ -1,0 +1,45 @@
+{% extends 'emails/_layout.html' %}
+{#- order['items'], never order.items: Jinja would find the dict's items() method. -#}
+{% block title %}Order {{ order.number }} has shipped{% endblock %}
+{% block preheader %}Order {{ order.number }} is on its way. {{ order.carrier_name }} tracking: {{ order.tracking_number }}{% endblock %}
+{% block screen_label %}ON ITS WAY{% endblock %}
+{% block screen %}
+<div style="font-size:22px; font-weight:bold; letter-spacing:2px;">IT'S ON ITS WAY!</div>
+<p style="margin:12px 0 20px;">Good news{% if order.first_name %}, {{ order.first_name }}{% endif %}! Order {{ order.number }} shipped{% if order.shipped_on %} on {{ order.shipped_on }}{% endif %}.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:2px solid #1b2a1d; border-bottom:2px solid #1b2a1d; font-family:'Courier New',Courier,monospace; font-size:14px; color:#1b2a1d;">
+  <tr>
+    <td style="padding:10px 10px 4px 0; font-weight:bold;">CARRIER</td>
+    <td align="right" style="padding:10px 0 4px;">{{ order.carrier_name }}</td>
+  </tr>
+  <tr>
+    <td style="padding:4px 10px 10px 0; font-weight:bold;">TRACKING</td>
+    <td align="right" style="padding:4px 0 10px; word-break:break-all;">{{ order.tracking_number }}</td>
+  </tr>
+</table>
+
+{% if order.tracking_url %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 6px;">
+  <tr>
+    <td bgcolor="#444444" style="background-color:#444444; border-radius:4px;">
+      <a href="{{ order.tracking_url }}" style="display:inline-block; padding:12px 18px; font-family:'Courier New',Courier,monospace; font-size:14px; font-weight:bold; letter-spacing:1px; color:#ffffff; text-decoration:none;">&#9654; TRACK YOUR PACKAGE</a>
+    </td>
+  </tr>
+</table>
+{% endif %}
+<div style="font-size:12px;">Tracking can take up to a day to show its first scan.</div>
+
+<div style="margin:24px 0 4px; font-weight:bold; letter-spacing:1px;">IN THE BOX</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:'Courier New',Courier,monospace; font-size:14px; color:#1b2a1d;">
+  {% for item in order['items'] %}
+  <tr><td style="padding:2px 0;">&#9654; {{ item.title }}{% if (item.quantity or 1) > 1 %} &times;{{ item.quantity }}{% endif %}</td></tr>
+  {% endfor %}
+</table>
+
+{% if order.address_lines %}
+<div style="margin:24px 0 4px; font-weight:bold; letter-spacing:1px;">SHIPPING TO</div>
+<div>{% if order.name %}{{ order.name }}<br>{% endif %}{% for line in order.address_lines %}{{ line }}<br>{% endfor %}</div>
+{% endif %}
+
+<p style="margin:24px 0 0;">Something not right when it arrives? Reply to this email - every console is covered by our 30-day warranty.</p>
+{% endblock %}

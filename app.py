@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, jsonify, redirect, Response
+from flask import (Flask, render_template, request, jsonify, redirect, Response,
+                   abort, flash)
 from markupsafe import escape
 from werkzeug.middleware.proxy_fix import ProxyFix
 import stripe
@@ -10,7 +11,8 @@ import threading
 import unicodedata
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
+from urllib.parse import quote
 import requests
 from dotenv import load_dotenv
 import psycopg2
@@ -95,8 +97,8 @@ MARKETING_FROM = os.environ.get(
 RESEND_AUDIENCE_ID = os.environ.get('RESEND_AUDIENCE_ID')
 
 
-def send_email(subject, body, to=None, reply_to=None):
-    """Send a plain-text email through Resend.
+def send_email(subject, body, to=None, reply_to=None, html=None, bcc=None):
+    """Send an email through Resend: plain text, plus an HTML version if given.
 
     Returns True on success. Never raises - callers treat mail as best-effort so a
     mail outage cannot take down a form submission that already hit the database.
@@ -112,8 +114,12 @@ def send_email(subject, body, to=None, reply_to=None):
         'subject': subject,
         'text': body,
     }
+    if html:
+        payload['html'] = html
     if reply_to:
         payload['reply_to'] = reply_to
+    if bcc:
+        payload['bcc'] = [bcc] if isinstance(bcc, str) else list(bcc)
 
     try:
         response = requests.post(
@@ -371,18 +377,229 @@ def admin_login_post():
         return render_template('admin_login.html', error='Invalid password')
 
 
+# ============================================================
+# ORDERS AND ORDER EMAILS
+# The confirmation goes out automatically from the Stripe webhook. The shipping
+# email goes out from the orders page once a tracking number is entered.
+# ============================================================
+
+# Order numbers are the row id plus an offset, so the first order reads
+# GBR-1001 rather than a give-away "#1".
+ORDER_NUMBER_OFFSET = 1000
+
+# The confirmation email promises tracking within this - keep it to something
+# you can always meet.
+TRACKING_WITHIN = '2 business days'
+
+# Orders are dated in the shop's own time zone, not the database's UTC.
+SHOP_TIMEZONE = 'America/Los_Angeles'
+
+# key: (name shown to the customer, tracking page with {} for the number)
+CARRIERS = {
+    'usps': ('USPS', 'https://tools.usps.com/go/TrackConfirmAction?tLabels={}'),
+    'ups': ('UPS', 'https://www.ups.com/track?tracknum={}'),
+    'fedex': ('FedEx', 'https://www.fedex.com/fedextrack/?trknbr={}'),
+    'other': ('Other carrier', None),
+}
+
+# kind: (column recording when it went out, template, subject)
+ORDER_EMAILS = {
+    'confirmation': ('confirmation_sent_at', 'order_confirmation',
+                     'Order {number} confirmed - Gameboy Retreat'),
+    'shipped': ('shipped_email_sent_at', 'order_shipped',
+                'Your order {number} has shipped - Gameboy Retreat'),
+}
+
+ORDER_COLUMNS = ('id', 'session_id', 'customer_email', 'customer_name', 'amount',
+                 'items', 'shipping_address', 'status', 'tracking_number', 'carrier',
+                 'created_at', 'shipped_at', 'surface', 'ref', 'last_ref',
+                 'confirmation_sent_at', 'shipped_email_sent_at')
+
+
+def order_number(order_id):
+    return f"GBR-{ORDER_NUMBER_OFFSET + int(order_id)}"
+
+
+def shop_date(value):
+    """'October 15, 2026' in the shop's time zone, from a naive UTC timestamp."""
+    if not value:
+        return ''
+    try:
+        from zoneinfo import ZoneInfo
+        value = value.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(SHOP_TIMEZONE))
+    except Exception:
+        pass        # no tz database (bare Windows Python): UTC is close enough
+    return f"{value:%B} {value.day}, {value.year}"
+
+
+def format_address(address):
+    """Stripe's address dict as display lines, US-style."""
+    if not isinstance(address, dict):
+        return []
+    region = ' '.join(p for p in (address.get('state'), address.get('postal_code')) if p)
+    city_line = ', '.join(p for p in (address.get('city'), region) if p)
+    lines = [address.get('line1'), address.get('line2'), city_line]
+    if address.get('country') and address.get('country') != 'US':
+        lines.append(address.get('country'))
+    return [line for line in lines if line]
+
+
+def apply_tracking(order, carrier, tracking_number):
+    """Set the carrier name and tracking link an email shows."""
+    name, url = CARRIERS.get(carrier or '', (carrier or '', None))
+    order['carrier'] = carrier
+    order['tracking_number'] = tracking_number
+    order['carrier_name'] = name
+    order['tracking_url'] = (url.format(quote(tracking_number))
+                             if url and tracking_number else None)
+    return order
+
+
+def order_from_row(row):
+    order = dict(zip(ORDER_COLUMNS, row))
+    order['number'] = order_number(order['id'])
+    order['amount'] = float(order['amount'] or 0)
+    items = order['items'] or []
+    order['items'] = json.loads(items) if isinstance(items, str) else items
+    address = order['shipping_address'] or {}
+    order['address_lines'] = format_address(
+        json.loads(address) if isinstance(address, str) else address)
+    name = (order['customer_name'] or '').strip()
+    order['name'] = '' if name in ('', 'N/A') else name
+    order['first_name'] = order['name'].split()[0] if order['name'] else ''
+    order['placed_on'] = shop_date(order['created_at'])
+    order['shipped_on'] = shop_date(order['shipped_at'])
+    return apply_tracking(order, order['carrier'], order['tracking_number'])
+
+
+def load_orders(where='TRUE', params=(), limit=100):
+    with get_cursor() as cursor:
+        cursor.execute(f"SELECT {', '.join(ORDER_COLUMNS)} FROM orders WHERE {where} "
+                       f"ORDER BY created_at DESC LIMIT {int(limit)}", params)
+        return [order_from_row(row) for row in cursor.fetchall()]
+
+
+def load_order(order_id):
+    found = load_orders('id = %s', (order_id,), limit=1)
+    return found[0] if found else None
+
+
+def render_order_email(order, kind):
+    """(subject, html, text) for one order email."""
+    _, template, subject = ORDER_EMAILS[kind]
+    context = {
+        'order': order,
+        'site': site_root(),
+        'ship_within': TRACKING_WITHIN,
+        # Services and lessons have no shipping address - nothing ships.
+        'ships': bool(order['address_lines']),
+    }
+    return (subject.format(number=order['number']),
+            render_template(f'emails/{template}.html', **context),
+            render_template(f'emails/{template}.txt', **context))
+
+
+def send_order_email(order_id, kind, force=False):
+    """Email the customer about an order: 'sent', 'already sent' or 'failed'.
+
+    Without `force` the order's sent-at column is claimed first, so two copies
+    of the same Stripe webhook can never both send. A failed send releases the
+    claim, so a retry - or the Send button on the orders page - tries again.
+    """
+    column = ORDER_EMAILS[kind][0]
+    if not force:
+        with get_cursor(commit=True) as cursor:
+            cursor.execute(f"UPDATE orders SET {column} = NOW() "
+                           f"WHERE id = %s AND {column} IS NULL RETURNING id", (order_id,))
+            if cursor.fetchone() is None:
+                return 'already sent'
+
+    order = load_order(order_id)
+    sent = False
+    if order and '@' in (order['customer_email'] or ''):
+        subject, html, text = render_order_email(order, kind)
+        # The shop gets a copy of every confirmation: it is the new-order alert.
+        bcc = (MAIL_RECIPIENT if kind == 'confirmation' and MAIL_RECIPIENT
+               and MAIL_RECIPIENT.lower() != order['customer_email'].lower() else None)
+        sent = send_email(subject, text, to=order['customer_email'],
+                          reply_to=MAIL_RECIPIENT, html=html, bcc=bcc)
+
+    if sent or not force:
+        with get_cursor(commit=True) as cursor:
+            cursor.execute(f"UPDATE orders SET {column} = {'NOW()' if sent else 'NULL'} "
+                           "WHERE id = %s", (order_id,))
+    return 'sent' if sent else 'failed'
+
+
 @app.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
-    """Admin dashboard - view orders"""
+    """Orders, newest first: what to ship, where, and which emails went out."""
     try:
-        with get_cursor() as cursor:
-            cursor.execute('SELECT * FROM orders ORDER BY created_at DESC LIMIT 50')
-            orders = cursor.fetchall()
-
-        return render_template('admin_dashboard.html', orders=orders)
+        orders = load_orders()
     except Exception as e:
         return f"Error: {e}", 500
+    return render_template('admin_dashboard.html', orders=orders, carriers=CARRIERS,
+                           emails_on=bool(RESEND_API_KEY), ship_within=TRACKING_WITHIN)
+
+
+@app.route('/admin/orders/<int:order_id>/email/<kind>', methods=['GET', 'POST'])
+@login_required
+def admin_order_email(order_id, kind):
+    """GET shows an order email exactly as the customer gets it. POST sends it -
+    again, if it already went out."""
+    if kind not in ORDER_EMAILS:
+        abort(404)
+    order = load_order(order_id)
+    if not order:
+        abort(404)
+
+    if request.method == 'GET':
+        if kind == 'shipped' and not order['tracking_number']:
+            # Not shipped yet: preview with whatever is typed into the form.
+            carrier = request.args.get('carrier')
+            tracking = re.sub(r'\s+', '', request.args.get('tracking_number', ''))
+            apply_tracking(order, carrier if carrier in CARRIERS else 'usps',
+                           tracking or '9400100000000000000000')
+        return render_order_email(order, kind)[1]
+
+    if kind == 'shipped' and not order['tracking_number']:
+        flash(f"{order['number']} has no tracking number yet - mark it shipped first.", 'error')
+    elif send_order_email(order_id, kind, force=True) == 'sent':
+        flash(f"Sent the {kind} email for {order['number']} to {order['customer_email']}.")
+    else:
+        flash(f"Could not send the {kind} email for {order['number']} - see the server log.",
+              'error')
+    return redirect(f'/admin/dashboard#order-{order_id}')
+
+
+@app.route('/admin/orders/<int:order_id>/ship', methods=['POST'])
+@login_required
+def admin_order_ship(order_id):
+    """Record the tracking number, mark the order shipped and email the customer."""
+    carrier = request.form.get('carrier', '')
+    tracking = re.sub(r'\s+', '', request.form.get('tracking_number', ''))
+    if carrier not in CARRIERS or not re.fullmatch(r'[A-Za-z0-9-]{4,40}', tracking):
+        flash('Choose a carrier and enter the tracking number (letters and numbers).',
+              'error')
+        return redirect(f'/admin/dashboard#order-{order_id}')
+
+    with get_cursor(commit=True) as cursor:
+        cursor.execute('''
+            UPDATE orders SET status = 'shipped', carrier = %s, tracking_number = %s,
+                              shipped_at = COALESCE(shipped_at, NOW())
+            WHERE id = %s RETURNING id
+        ''', (carrier, tracking, order_id))
+        if cursor.fetchone() is None:
+            abort(404)
+
+    number = order_number(order_id)
+    if send_order_email(order_id, 'shipped', force=True) == 'sent':
+        flash(f"{number} marked shipped and the customer emailed their tracking number.")
+    else:
+        flash(f"{number} marked shipped, but the shipping email did not send - "
+              f"use Resend once email is working.", 'error')
+    return redirect(f'/admin/dashboard#order-{order_id}')
 
 
 @app.route('/admin/logout')
@@ -1514,6 +1731,17 @@ def init_db():
             cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS ref TEXT")
             cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_ref TEXT")
 
+            # Order emails: when the confirmation and the shipping email went out
+            # (so a Stripe retry never sends a second copy), and the carrier the
+            # shipping email links its tracking number to.
+            cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS carrier TEXT")
+            cursor.execute(
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmation_sent_at TIMESTAMP"
+            )
+            cursor.execute(
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_email_sent_at TIMESTAMP"
+            )
+
             # First-party visit and interaction log. No IP address, no user
             # agent, no cookies - a random per-tab session id is the only link
             # between events, and it cannot identify anyone.
@@ -2627,6 +2855,20 @@ def webhook():
                     print(f"⚠️ Could not consume hold {hold_token}: {e}")
             else:
                 print(f"⚠️ Session {session_id} had no hold_token; stock not adjusted")
+
+            # The customer's confirmation, with a copy to the shop. Stripe retries
+            # are safe: send_order_email() skips an order whose confirmation
+            # already went out. A mail problem must not fail the webhook - the
+            # order is saved, and the orders page can send the email later.
+            try:
+                with get_cursor() as cursor:
+                    cursor.execute('SELECT id FROM orders WHERE session_id = %s', (session_id,))
+                    row = cursor.fetchone()
+                if row:
+                    result = send_order_email(row[0], 'confirmation')
+                    print(f"📧 Confirmation for {order_number(row[0])}: {result}")
+            except Exception as mail_err:
+                print(f"⚠️ Confirmation email error: {mail_err}")
 
             print(f"✅ Payment successful for: {customer_email} - ${amount_total}")
 

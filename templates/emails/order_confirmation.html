@@ -1,0 +1,47 @@
+{% extends 'emails/_layout.html' %}
+{#- order['items'], never order.items: Jinja would find the dict's items() method. -#}
+{% block title %}Order {{ order.number }} confirmed{% endblock %}
+{% block preheader %}Thanks for your order! {% if ships %}Your tracking number follows within {{ ship_within }}.{% else %}We'll be in touch within 24 hours.{% endif %}{% endblock %}
+{% block screen_label %}ORDER CONFIRMED{% endblock %}
+{% block screen %}
+<div style="font-size:22px; font-weight:bold; letter-spacing:2px;">ORDER CONFIRMED!</div>
+<p style="margin:12px 0 20px;">Thanks{% if order.first_name %}, {{ order.first_name }}{% endif %}! {% if ships %}Your order is in, and it's getting a final check before it ships.{% else %}Your order is in.{% endif %}</p>
+
+<div style="font-weight:bold; letter-spacing:1px;">ORDER {{ order.number }}</div>
+<div style="margin:0 0 12px;">Placed {{ order.placed_on }}</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border-top:2px solid #1b2a1d; font-family:'Courier New',Courier,monospace; font-size:14px; color:#1b2a1d;">
+  {% for item in order['items'] %}
+  <tr>
+    <td valign="top" style="padding:10px 10px 10px 0;">&#9654; {{ item.title }}{% if (item.quantity or 1) > 1 %} &times;{{ item.quantity }}{% endif %}</td>
+    <td valign="top" align="right" style="padding:10px 0; white-space:nowrap;">${{ '%.2f'|format(item.amount or 0) }}</td>
+  </tr>
+  {% endfor %}
+  {% if ships %}
+  <tr>
+    <td style="padding:8px 10px 8px 0; border-top:1px dashed #1b2a1d;">Shipping</td>
+    <td align="right" style="padding:8px 0; border-top:1px dashed #1b2a1d;">FREE</td>
+  </tr>
+  {% endif %}
+  <tr>
+    <td bgcolor="#444444" style="background-color:#444444; color:#ffffff; padding:8px 10px; font-weight:bold; letter-spacing:1px;">TOTAL</td>
+    <td bgcolor="#444444" align="right" style="background-color:#444444; color:#ffffff; padding:8px 10px; font-weight:bold; white-space:nowrap;">${{ '%.2f'|format(order.amount) }}</td>
+  </tr>
+</table>
+
+{% if ships %}
+<div style="margin:24px 0 4px; font-weight:bold; letter-spacing:1px;">SHIP TO</div>
+<div>{% if order.name %}{{ order.name }}<br>{% endif %}{% for line in order.address_lines %}{{ line }}<br>{% endfor %}</div>
+{% endif %}
+
+<div style="margin:24px 0 8px; font-weight:bold; letter-spacing:1px;">WHAT HAPPENS NEXT</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:'Courier New',Courier,monospace; font-size:14px; line-height:1.55; color:#1b2a1d;">
+  {% if ships %}
+  <tr><td valign="top" style="padding:0 10px 8px 0; width:18px;">1.</td><td style="padding:0 0 8px;">We give everything a final test and pack it carefully.</td></tr>
+  <tr><td valign="top" style="padding:0 10px 8px 0;">2.</td><td style="padding:0 0 8px;">Your tracking number arrives by email within {{ ship_within }}.</td></tr>
+  <tr><td valign="top" style="padding:0 10px 0 0;">3.</td><td>It ships from Stockton, CA, covered by our 30-day warranty.</td></tr>
+  {% else %}
+  <tr><td>We'll email you within 24 hours with the next steps.</td></tr>
+  {% endif %}
+</table>
+{% endblock %}

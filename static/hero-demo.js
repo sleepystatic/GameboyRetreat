@@ -29,6 +29,12 @@
     // Mirrors MENUS['main-menu'] in static/script.js.
     const MAIN_MENU = ['Shop', 'Cart', 'Sell To Us', 'Notify Me', 'About'];
 
+    // Same as formatPrice() in static/script.js: "$175", or "$174.50".
+    const price = value => {
+        const n = Number(value) || 0;
+        return '$' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+    };
+
     // Milliseconds. Slow enough to follow, quick enough that one loop fits in
     // the time someone spends looking at the hero.
     const PAUSE = { look: 1300, step: 380, press: 240, settle: 450,
@@ -110,7 +116,7 @@
     function categoryMenu(listing, active) {
         draw([{ text: 'Back' }].concat(listing.rows.map(r => r.in_stock
             ? { text: r.title,
-                meta: '$' + r.price + ' · ' + (r.service ? 'available' : r.left + ' left') }
+                meta: price(r.price) + ' · ' + (r.service ? 'available' : r.left + ' left') }
             : { text: r.title, strike: true, cls: 'is-out',
                 icon: r.coming_soon ? '◷' : '✖',
                 meta: r.coming_soon ? 'Coming Soon' : 'Out of Stock' })), active);
@@ -123,7 +129,7 @@
         draw([
             { text: listing.title, cls: 'title' },
             { img: listing.image, cls: 'photo' },
-            { text: 'Price: $' + listing.price },
+            { text: 'Price: ' + price(listing.price) },
             { text: 'Add to Cart' },
             { text: 'Back' },
         ], active);

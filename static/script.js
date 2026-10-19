@@ -365,6 +365,31 @@ async function loadInventory() {
     }
 }
 
+// Re-read stock and prices while the page is open - the cart calls this so it
+// never shows a price that has since changed. Unlike loadInventory(), a failure
+// keeps what is already loaded: a network blip must not empty everyone's cart.
+async function refreshInventory() {
+    try {
+        const response = await fetch('/api/stock', { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        listings = data;
+        inventoryError = false;
+        return true;
+    } catch (error) {
+        console.warn('Could not refresh inventory; keeping the last copy:', error);
+        return false;
+    }
+}
+
+// Whole dollars as "$175", anything else to the cent, e.g. "$174.50".
+function formatPrice(value) {
+    const n = Number(value) || 0;
+    return '$' + (Number.isInteger(n) ? String(n) : n.toFixed(2));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Build the static menus from MENUS before anything queries the DOM for them.
     loadShopCategories();
@@ -468,6 +493,56 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (window.gbrTrack) window.gbrTrack('add_to_cart', { listing: item.slug || item.title });
         localStorage.setItem('gameboyCart', JSON.stringify(cart));
         showCartMessage();
+    }
+
+    // Bring every cart line up to date with the shop. Checkout always charges the
+    // current price - the server reads it from the database - so a price saved
+    // when the item was added would only resurface as a surprise at Stripe.
+    // Returns the lines whose price changed, for the cart to point out.
+    function syncCartPrices() {
+        const changes = [];
+        let dirty = false;
+        cart.forEach(entry => {
+            let listing = findListing(entry);
+            if (!listing && entry.listing_id != null) {
+                // Moved to another category since it was added.
+                for (const [category, items] of Object.entries(listings)) {
+                    const match = items.find(i => i.id === entry.listing_id);
+                    if (match) {
+                        entry.category = category;
+                        listing = match;
+                        dirty = true;
+                        break;
+                    }
+                }
+            }
+            if (!listing) return;
+            if (Number(listing.price) !== Number(entry.price)) {
+                changes.push({ title: listing.title, from: entry.price, to: listing.price });
+                entry.price = listing.price;
+                dirty = true;
+            }
+            if (listing.title !== entry.title) {
+                entry.title = listing.title;
+                dirty = true;
+            }
+            const image = (listing.images || [])[0];
+            if (image && image !== entry.img) {
+                entry.img = image;
+                dirty = true;
+            }
+        });
+        if (dirty) localStorage.setItem('gameboyCart', JSON.stringify(cart));
+        return changes;
+    }
+
+    // What the cart view depends on: each line's price and whether it can still
+    // be bought. Used to redraw only when a refresh actually changed something.
+    function cartState() {
+        return cart.map(entry => {
+            const listing = findListing(entry);
+            return `${entry.price}|${listing && isAvailable(listing) ? 1 : 0}`;
+        }).join(',');
     }
 
     // Briefly take over the screen, then put the menu back exactly as it was.
@@ -611,7 +686,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    function renderCart() {
+    // priceChanges: from syncCartPrices(), shown so a customer is not surprised
+    // by a different price at checkout.
+    function renderCart(priceChanges = []) {
         currentMenu.classList.remove('active-menu');
         currentMenu.classList.add('hidden');
 
@@ -635,6 +712,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             let total = 0;
             let unavailableCount = 0;
 
+            priceChanges.forEach(change => {
+                cartHTML += `<li class="menu-item info cart-price-note">Price update: ${escapeHTML(change.title)} is now ${formatPrice(change.to)} (was ${formatPrice(change.from)})</li>`;
+            });
+
             cart.forEach((item, index) => {
                 // Re-check against live inventory every time the cart is drawn -
                 // something may have sold while it sat in localStorage.
@@ -645,16 +726,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     unavailableCount++;
                     cartHTML += `<li class="menu-item cart-line-gone" data-cart-index="${index}">
                         <span class="stock-icon">${stockIcon(listing)}</span>
-                        <span class="strikethrough">${item.title} - $${item.price}</span>
+                        <span class="strikethrough">${escapeHTML(item.title)} - ${formatPrice(item.price)}</span>
                         <span class="stock-label">${listing ? stockLabel(listing) : 'No longer listed'}</span>
                     </li>`;
                 } else {
-                    cartHTML += `<li class="menu-item" data-cart-index="${index}">${item.title} - $${item.price}</li>`;
-                    total += item.price;
+                    cartHTML += `<li class="menu-item" data-cart-index="${index}">${escapeHTML(item.title)} - ${formatPrice(item.price)}</li>`;
+                    total += Number(item.price) || 0;
                 }
             });
 
-            cartHTML += `<li class="menu-item cart-total">Total: $${total}</li>`;
+            cartHTML += `<li class="menu-item cart-total">Total: ${formatPrice(total)}</li>`;
 
             if (unavailableCount > 0) {
                 cartHTML += `<li class="menu-item cart-warning info">${unavailableCount} item${unavailableCount > 1 ? 's are' : ' is'} no longer available</li>`;
@@ -680,7 +761,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <li class="menu-item cart-item-image">
                 <img src="${item.img}" alt="${item.title}" class="product-image">
             </li>
-            <li class="menu-item cart-item-price">Price: $${item.price}</li>
+            <li class="menu-item cart-item-price">Price: ${formatPrice(item.price)}</li>
             <li class="menu-item active" data-action="viewListing">View Listing</li>
             <li class="menu-item" data-action="removeCartItem">Remove Item</li>
             <li class="menu-item" data-action="backToCart">Back to Cart</li>
@@ -767,7 +848,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             switchMenu('main-menu');
         },
 
-        cart() { renderCart(); },
+        cart() {
+            // Draw straight away with what is loaded, then re-check prices and
+            // stock with the server and redraw only if something changed - the
+            // cart never waits on the network, and never shows a stale price.
+            renderCart(syncCartPrices());
+            const before = cartState();
+            refreshInventory().then(ok => {
+                if (!ok) return;
+                decorateShopMenu();
+                const changes = syncCartPrices();
+                const stillOnCart = currentMenu.id === 'cart-menu'
+                    && !currentMenu.hasAttribute('data-viewing-cart-index');
+                if (stillOnCart && (changes.length || cartState() !== before)) {
+                    renderCart(changes);
+                }
+            });
+        },
 
         sell() { switchMenu('sell-menu'); },
 
@@ -1081,7 +1178,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ${imageNavHint}
             </li>
             <li class="menu-item gallery-description">${escapeHTML(item.description)}</li>
-            <li class="menu-item gallery-price">Price: $${item.price}</li>
+            <li class="menu-item gallery-price">Price: ${formatPrice(item.price)}</li>
             <li class="menu-item">Add to Cart</li>
             <li class="menu-item">${backText}</li>
         `;
@@ -1111,7 +1208,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (isAvailable(item)) {
                 // Services never run out, so a quantity would be meaningless.
                 const qty = item.is_service ? 'available' : `${item.stock} left`;
-                listingsHTML += `<li class="menu-item row-split" data-listing-category="${category}" data-listing-index="${index}"><span class="row-title">${escapeHTML(item.title)}</span><span class="row-meta">$${item.price} &middot; ${qty}</span></li>`;
+                listingsHTML += `<li class="menu-item row-split" data-listing-category="${category}" data-listing-index="${index}"><span class="row-title">${escapeHTML(item.title)}</span><span class="row-meta">${formatPrice(item.price)} &middot; ${qty}</span></li>`;
             } else {
                 const soon = item.status === 'coming_soon' ? ' coming-soon' : '';
                 listingsHTML += `<li class="menu-item out-of-stock row-split${soon}"><span class="row-title"><span class="stock-icon">${stockIcon(item)}</span><span class="strikethrough">${escapeHTML(item.title)}</span></span><span class="row-meta">${stockLabel(item)}</span></li>`;

@@ -1,99 +1,137 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Admin Dashboard - Gameboy Retreat</title>
-    <style>
-        body {
-            font-family: monospace;
-            background: #0a0a0a;
-            color: #b2f2bb;
-            padding: 20px;
-            margin: 0;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #b2f2bb;
-        }
-        h1 {
-            margin: 0;
-            color: #b2f2bb;
-        }
-        .logout {
-            background: #ff6b6b;
-            color: #fff;
-            padding: 10px 20px;
-            text-decoration: none;
-            border: 2px solid #ff6b6b;
-        }
-        .logout:hover {
-            background: #ff5252;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: #1a1a1a;
-            border: 2px solid #b2f2bb;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #333;
-        }
-        th {
-            background: #222;
-            color: #b2f2bb;
-            font-weight: bold;
-        }
-        tr:hover {
-            background: #222;
-        }
-        .no-orders {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orders | Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
 </head>
 <body>
-    <div class="header">
-        <h1>Recent Orders</h1>
-        <span>
-            <a href="/admin/listings">Inventory</a>
-            <a href="/admin/analytics">Analytics</a>
-            <a href="/admin/listings/new">+ New Listing</a>
-            <a href="/admin/logout" class="logout">Logout</a>
-        </span>
-    </div>
+<header class="admin-header">
+    <h1>Orders</h1>
+    <nav>
+        <a href="/admin/listings">Inventory</a>
+        <a href="/admin/categories">Categories</a>
+        <a href="/admin/analytics">Analytics</a>
+        <a href="/admin/logout">Log out</a>
+    </nav>
+</header>
 
-    {% if orders %}
-    <table>
-        <thead>
-            <tr>
-                <th>Order ID</th>
-                <th>Customer</th>
-                <th>Amount</th>
-                <th>Date</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for order in orders %}
-            <tr>
-                <td>{{ order[1][:20] }}...</td>
-                <td>{{ order[2] }}</td>
-                <td>${{ "%.2f"|format(order[4]) }}</td>
-                <td>{{ order[10] }}</td>
-                <td>{{ order[7] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="no-orders">No orders yet</div>
+<main class="admin-main">
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+    <div class="notice{{ ' error' if category == 'error' else ' ok' }}">{{ message }}</div>
+    {% endfor %}
+
+    {% if not emails_on %}
+    <div class="notice error">
+        Order emails are off: <code>RESEND_API_KEY</code> is not set on this server, so
+        confirmations and shipping emails cannot go out. Orders still save normally.
+    </div>
     {% endif %}
+
+    {% if not orders %}
+    <p class="empty">No orders yet.</p>
+    {% endif %}
+
+    {#- order['items'], never order.items: Jinja would find the dict's items() method. -#}
+    <ol class="order-list">
+        {% for o in orders %}
+        <li class="order-card{{ ' is-shipped' if o.tracking_number }}" id="order-{{ o.id }}">
+            <div class="order-head">
+                <strong>{{ o.number }}</strong>
+                <span class="muted">{{ o.placed_on }}</span>
+                <span class="order-total">${{ '%.2f'|format(o.amount) }}</span>
+                {% if o.tracking_number %}
+                <span class="flag flag-ok">Shipped {{ o.shipped_on }}</span>
+                {% elif o.address_lines %}
+                <span class="flag flag-warn">To ship</span>
+                {% else %}
+                <span class="flag">No shipping</span>
+                {% endif %}
+            </div>
+
+            <div class="order-body">
+                <div>
+                    <span class="field-label">Customer</span>
+                    {{ o.name or '-' }}<br>
+                    <a href="mailto:{{ o.customer_email }}">{{ o.customer_email }}</a>
+                </div>
+                <div>
+                    <span class="field-label">Ship to</span>
+                    {% for line in o.address_lines %}{{ line }}<br>{% else %}<span class="muted">No address - service or lesson</span>{% endfor %}
+                </div>
+                <div>
+                    <span class="field-label">Items</span>
+                    {% for item in o['items'] %}
+                    {{ item.quantity or 1 }}&times; {{ item.title }} <span class="muted">${{ '%.2f'|format(item.amount or 0) }}</span><br>
+                    {% endfor %}
+                </div>
+                <div>
+                    <span class="field-label">Came from</span>
+                    {{ o.ref or 'direct' }} <span class="muted">&middot; {{ 'Game Boy' if o.surface == 'console' else (o.surface or '-') }}</span>
+                </div>
+            </div>
+
+            <div class="order-actions">
+                <div class="order-email">
+                    <span class="field-label">Confirmation email</span>
+                    {% if o.confirmation_sent_at %}<span class="flag flag-ok">Sent</span>{% else %}<span class="flag flag-warn">Not sent</span>{% endif %}
+                    <a href="/admin/orders/{{ o.id }}/email/confirmation" target="_blank" rel="noopener">Preview</a>
+                    <form method="post" action="/admin/orders/{{ o.id }}/email/confirmation" class="inline-form">
+                        <button class="btn-small">{{ 'Resend' if o.confirmation_sent_at else 'Send' }}</button>
+                    </form>
+                </div>
+
+                <div class="order-email">
+                    <span class="field-label">Shipping</span>
+                    {% if o.tracking_number %}
+                        {{ o.carrier_name }}
+                        {% if o.tracking_url %}<a href="{{ o.tracking_url }}" target="_blank" rel="noopener">{{ o.tracking_number }}</a>{% else %}{{ o.tracking_number }}{% endif %}
+                        &middot;
+                        {% if o.shipped_email_sent_at %}<span class="flag flag-ok">Emailed</span>{% else %}<span class="flag flag-warn">Not emailed</span>{% endif %}
+                        <a href="/admin/orders/{{ o.id }}/email/shipped" target="_blank" rel="noopener">Preview</a>
+                        <form method="post" action="/admin/orders/{{ o.id }}/email/shipped" class="inline-form">
+                            <button class="btn-small">{{ 'Resend' if o.shipped_email_sent_at else 'Send' }}</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="/admin/orders/{{ o.id }}/ship" class="ship-form">
+                            <select name="carrier" aria-label="Carrier">
+                                {% for key, carrier in carriers.items() %}
+                                <option value="{{ key }}">{{ carrier[0] }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" name="tracking_number" placeholder="Tracking number"
+                                   aria-label="Tracking number" required autocomplete="off">
+                            <a href="/admin/orders/{{ o.id }}/email/shipped" class="preview-shipping"
+                               target="_blank" rel="noopener">Preview</a>
+                            <button type="submit">Mark shipped &amp; email</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </li>
+        {% endfor %}
+    </ol>
+
+    <p class="hint">
+        Confirmations go out automatically when a payment completes - you get a copy
+        of each one as your new-order alert. Customers are promised tracking within
+        {{ ship_within }}.
+    </p>
+</main>
+
+<script>
+    // Preview the shipping email with whatever is typed in that order's form.
+    document.querySelectorAll('.preview-shipping').forEach(function (link) {
+        link.addEventListener('click', function () {
+            var form = link.closest('form');
+            var params = new URLSearchParams({
+                carrier: form.elements.carrier.value,
+                tracking_number: form.elements.tracking_number.value
+            });
+            link.href = link.href.split('?')[0] + '?' + params.toString();
+        });
+    });
+</script>
 </body>
 </html>

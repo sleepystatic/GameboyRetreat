@@ -316,6 +316,62 @@ textarea { resize: vertical; }
 }
 
 .flag-warn { border-color: var(--amber); color: var(--amber); }
+.flag-ok { border-color: var(--green); color: var(--green); }
+
+/* ---------- orders ---------- */
+
+.notice.ok { border-left-color: var(--green); }
+
+.order-list { list-style: none; margin: 0 0 24px; padding: 0; display: grid; gap: 14px; }
+
+.order-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--amber);
+    padding: 14px 16px;
+    font-size: 13px;
+}
+
+.order-card.is-shipped { border-left-color: var(--green); }
+
+.order-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    margin-bottom: 12px;
+}
+
+.order-head strong { font-size: 15px; color: var(--green); }
+.order-head .flag { margin-left: 0; }
+.order-total { margin-left: auto; font-weight: bold; }
+
+.order-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    line-height: 1.6;
+}
+
+.order-actions { display: grid; gap: 10px; padding-top: 12px; }
+
+.order-email {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+
+.order-email .field-label { margin: 0; min-width: 150px; }
+.order-email .flag { margin-left: 0; }
+.inline-form { display: inline; }
+
+.ship-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ship-form select { width: auto; }
+.ship-form input[type="text"] { width: 240px; max-width: 100%; }
+.ship-form button[type="submit"] { padding: 8px 14px; }
 
 .cell-actions { white-space: nowrap; }
 .cell-actions a { margin-right: 10px; }

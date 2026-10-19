@@ -1,0 +1,31 @@
+{#- Plain-text twin of order_confirmation.html, for clients that show text. -#}
+GAMEBOY RETREAT
+
+ORDER CONFIRMED!
+
+Thanks{% if order.first_name %}, {{ order.first_name }}{% endif %}! {% if ships %}Your order is in, and it's getting a final check before it ships.{% else %}Your order is in.{% endif %}
+
+Order {{ order.number }} - placed {{ order.placed_on }}
+
+{% for item in order['items'] -%}
+- {{ item.title }}{% if (item.quantity or 1) > 1 %} x{{ item.quantity }}{% endif %}   ${{ '%.2f'|format(item.amount or 0) }}
+{% endfor -%}
+{% if ships %}Shipping   FREE
+{% endif -%}
+TOTAL   ${{ '%.2f'|format(order.amount) }}
+{% if ships %}
+Ship to:
+{% if order.name %}{{ order.name }}
+{% endif -%}
+{% for line in order.address_lines %}{{ line }}
+{% endfor %}
+What happens next:
+1. We give everything a final test and pack it carefully.
+2. Your tracking number arrives by email within {{ ship_within }}.
+3. It ships from Stockton, CA, covered by our 30-day warranty.
+{%- else %}
+What happens next: we'll email you within 24 hours with the next steps.
+{%- endif %}
+
+Questions? Just reply to this email.
+Gameboy Retreat - Stockton, CA - {{ site }}

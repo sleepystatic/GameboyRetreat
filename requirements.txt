@@ -30,6 +30,10 @@ pillow-heif==1.8.0
 # Config
 python-dotenv==1.0.1
 
+# Time zone data, so order emails are dated in California time on any server
+# (zoneinfo falls back to this when the system has no tz database).
+tzdata==2026.5
+
 # Platform
 colorama==0.4.6
 packaging==25.0
