@@ -7,22 +7,36 @@
     <title>{% block title %}Gameboy Retreat{% endblock %}</title>
     <meta name="description" content="{% block description %}Professionally refurbished Game Boy, Game Boy Color, Game Boy Advance and Nintendo DS handhelds. Cleaned, rehoused and restored to working order.{% endblock %}">
     {% if canonical %}<link rel="canonical" href="{{ canonical }}">{% endif %}
+    {% if noindex %}<meta name="robots" content="noindex">{% endif %}
 
     <!-- Open Graph: controls how the link looks when pasted into Discord,
-         Reddit, Facebook or iMessage. Without these a shared link is bare text. -->
+         Reddit, Facebook or iMessage. Without these a shared link is bare text.
+         The image is a 1200x630 card (share_cards.py) - listings get their own. -->
     <meta property="og:site_name" content="Gameboy Retreat">
     <meta property="og:type" content="{% block og_type %}website{% endblock %}">
     <meta property="og:title" content="{% block og_title %}Gameboy Retreat{% endblock %}">
     <meta property="og:description" content="{% block og_description %}Professionally refurbished retro handhelds.{% endblock %}">
     {% if canonical %}<meta property="og:url" content="{{ canonical }}">{% endif %}
-    {% block og_image_tag %}{% endblock %}
+    {% block og_image_tag %}
+    <meta property="og:image" content="{{ og_image or default_og_image() }}">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="{{ og_image_alt or 'Gameboy Retreat: refurbished Game Boys, restored by hand' }}">
+    <meta name="twitter:image" content="{{ og_image or default_og_image() }}">
+    {% endblock %}
     <meta name="twitter:card" content="summary_large_image">
     {% if google_site_verification %}<meta name="google-site-verification" content="{{ google_site_verification }}">{% endif %}
 
     <link rel="stylesheet" href="{{ url_for('static', filename='pages.css') }}">
     <link rel="preload" as="font" href="{{ url_for('static', filename='fonts/pixel-font.ttf') }}" type="font/ttf" crossorigin>
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#0a0a0a">
 
     {% block structured_data %}{% endblock %}
 
@@ -97,12 +111,13 @@
                     Every console and every repair is covered for 30 days. If something
                     fails in that window, you get it put right, replaced, or refunded.
                     Return shipping is on us when the fault is ours.
+                    <a href="/shipping-returns">Shipping &amp; returns</a>
                 </p>
             </section>
             <section>
                 <h2>Contact</h2>
                 <p>
-                    <a href="mailto:t.bryan.dev@gmail.com">t.bryan.dev@gmail.com</a><br>
+                    <a href="mailto:{{ support_email }}">{{ support_email }}</a><br>
                     Stockton, CA<br>
                     Replies within 24 hours
                 </p>
@@ -110,6 +125,7 @@
         </div>
         <p class="footer-legal">
             &copy; {{ year }} Gameboy Retreat. Not affiliated with or endorsed by Nintendo.
+            &middot; <a href="/shipping-returns">Shipping &amp; returns</a>
             &middot; <a href="/privacy">Privacy policy</a>
         </p>
     </footer>

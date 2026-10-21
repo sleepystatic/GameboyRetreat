@@ -317,6 +317,13 @@ textarea { resize: vertical; }
 
 .flag-warn { border-color: var(--amber); color: var(--amber); }
 .flag-ok { border-color: var(--green); color: var(--green); }
+.flag-bad { border-color: var(--red); color: var(--red); }
+.flag-hidden { border-style: dashed; }
+
+/* Hidden listings stay in the inventory, just quieter. */
+.row-hidden td { opacity: 0.6; }
+.row-hidden:hover td { opacity: 1; }
+.status-filter { margin-bottom: 16px; }
 
 /* ---------- orders ---------- */
 
@@ -372,6 +379,70 @@ textarea { resize: vertical; }
 .ship-form select { width: auto; }
 .ship-form input[type="text"] { width: 240px; max-width: 100%; }
 .ship-form button[type="submit"] { padding: 8px 14px; }
+
+/* ---------- refunds, cancellations, returns ---------- */
+
+.order-card.is-closed { border-left-color: var(--red); }
+.order-card.is-closed .order-body { opacity: .75; }
+
+.refund-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+.manage-order { border-top: 1px dashed var(--line); padding-top: 10px; }
+
+.manage-order summary {
+    display: inline-block;
+    cursor: pointer;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+    list-style: none;
+}
+.manage-order summary::-webkit-details-marker { display: none; }
+.manage-order summary::before { content: '▸ '; }
+.manage-order[open] summary::before { content: '▾ '; }
+.manage-order summary:hover, .manage-order[open] summary { color: var(--text); border-color: var(--muted); }
+
+.refund-form {
+    display: grid;
+    gap: 14px;
+    margin-top: 12px;
+    padding: 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    max-width: 640px;
+}
+
+.refund-form label { display: flex; flex-direction: column; gap: 4px; }
+.refund-form .field-label { margin: 0; }
+
+.refund-actions { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.refund-actions legend { padding: 0; margin-bottom: 6px; }
+.refund-actions label, .refund-checks label { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
+.refund-actions label.is-disabled { opacity: .45; cursor: default; }
+.refund-form input[type="radio"], .refund-form input[type="checkbox"] { width: auto; margin: 0; }
+
+.refund-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .refund-fields { grid-template-columns: 1fr; } }
+
+.refund-checks { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+
+.refund-submit { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
+
+/* `button.` to outrank button[type="submit"] - a refund should not look like
+   the everyday green buttons. */
+button.btn-refund {
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+    font-weight: bold;
+    padding: 9px 16px;
+    cursor: pointer;
+}
+button.btn-refund:hover:not(:disabled) { background: var(--red); color: var(--ink); border-color: var(--red); }
+button.btn-refund:disabled { opacity: .5; cursor: default; }
+
+.refund-form .hint { margin: 0; }
 
 .cell-actions { white-space: nowrap; }
 .cell-actions a { margin-right: 10px; }

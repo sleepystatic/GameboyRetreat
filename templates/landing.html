@@ -5,6 +5,12 @@
 {% block description %}Hand-restored Game Boy, Game Boy Color, Game Boy Advance and Nintendo DS handhelds. Cleaned, rehoused and repaired to work like new. 30-day warranty. Send in your own console for the same treatment.{% endblock %}
 {% block og_description %}Hand-restored retro handhelds, backed by a 30-day warranty. Or send in your own.{% endblock %}
 
+{% block structured_data %}
+<script type="application/ld+json">
+{{ structured_data|safe }}
+</script>
+{% endblock %}
+
 {% block content %}
 
 <section class="hero">

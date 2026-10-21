@@ -73,21 +73,28 @@ services:
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
-      # Must match the signing secret of the webhook destination that has
-      # checkout.session.completed AND checkout.session.expired enabled.
+      # Must match the signing secret of the webhook destination that has these
+      # events enabled: checkout.session.completed, checkout.session.expired,
+      # charge.refunded and charge.refund.updated (the last two record refunds
+      # made in the Stripe dashboard on the orders page).
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
 
       # --- email (Resend) -------------------------------------------------
       - key: RESEND_API_KEY
         sync: false
-      # Transactional, from the root domain.
+      # The shop's one public address (a real Namecheap Private Email inbox):
+      # shown on the site and set as reply-to on customer email.
+      - key: SUPPORT_EMAIL
+        value: support@gameboyretreat.com
+      # Everything sends as support@ so replies reach the inbox you read. To
+      # give newsletters their own reputation later, verify a subdomain in
+      # Resend and point MARKETING_FROM at it.
       - key: MAIL_FROM
-        value: Gameboy Retreat <orders@gameboyretreat.com>
-      # Marketing, from the subdomain, so complaints cannot damage the
-      # reputation that order confirmations depend on.
+        value: Gameboy Retreat <support@gameboyretreat.com>
       - key: MARKETING_FROM
-        value: Gameboy Retreat <hello@news.gameboyretreat.com>
+        value: Gameboy Retreat <support@gameboyretreat.com>
+      # Where the shop's own alerts go (new-order copies, sell-to-us offers).
       - key: MAIL_RECIPIENT
         sync: false
       - key: RESEND_AUDIENCE_ID

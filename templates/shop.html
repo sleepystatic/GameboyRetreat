@@ -24,36 +24,26 @@
 {% if not categories %}
     <p class="empty-state">
         Nothing listed right now. New restorations go up regularly &mdash;
-        <a href="mailto:t.bryan.dev@gmail.com">email us</a> if you are after something specific.
+        <a href="mailto:{{ support_email }}">email us</a> if you are after something specific.
     </p>
 {% endif %}
 
+{% from '_cards.html' import listing_card, service_row %}
 {% for category in categories %}
 <section class="category-block" id="{{ category.slug }}">
     <h2>{{ category.label }}</h2>
 
+    {% if category.products %}
     <ul class="listing-grid">
-        {% for item in category.products %}
-        <li class="listing-card {{ 'is-sold' if not item.in_stock else '' }}">
-            <a href="/listing/{{ item.slug }}">
-                <div class="card-media">
-                    {% if item.images %}
-                        <img src="{{ item.images[0] }}" alt="{{ item.title }}" loading="lazy">
-                    {% else %}
-                        <div class="card-media-empty">No photo</div>
-                    {% endif %}
-                    <span class="stock-badge">
-                        {{ 'SOLD OUT' if not item.in_stock else 'AVAILABLE' }}
-                    </span>
-                </div>
-                <div class="card-body">
-                    <h3>{{ item.title }}</h3>
-                    <p class="card-price">${{ '%.2f'|format(item.price) }}</p>
-                </div>
-            </a>
-        </li>
-        {% endfor %}
+        {% for item in category.products %}{{ listing_card(item) }}{% endfor %}
     </ul>
+    {% endif %}
+
+    {% if category.services %}
+    <ul class="price-list">
+        {% for item in category.services %}{{ service_row(item) }}{% endfor %}
+    </ul>
+    {% endif %}
 </section>
 {% endfor %}
 {% endblock %}

@@ -27,5 +27,6 @@ What happens next:
 What happens next: we'll email you within 24 hours with the next steps.
 {%- endif %}
 
-Questions? Just reply to this email.
+Questions? Just reply to this email, or write to {{ support_email }}.
+Shipping & returns: {{ site }}/shipping-returns
 Gameboy Retreat - Stockton, CA - {{ site }}

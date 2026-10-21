@@ -24,4 +24,6 @@ Shipping to:
 {% endif %}
 Something not right when it arrives? Reply to this email - every console is covered by our 30-day warranty.
 
+Questions? Write to {{ support_email }}.
+Shipping & returns: {{ site }}/shipping-returns
 Gameboy Retreat - Stockton, CA - {{ site }}

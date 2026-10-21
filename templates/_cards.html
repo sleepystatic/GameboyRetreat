@@ -1,0 +1,41 @@
+{#- Listing markup shared by /shop and the listing page's "More ..." section.
+    Import with: {% from '_cards.html' import listing_card, service_row %} -#}
+
+{#- A console as a photo card. Coming soon is not sold out: it gets its own
+    badge, and a sold-out card is greyed. -#}
+{% macro listing_card(item) -%}
+{%- set label = 'AVAILABLE' if item.in_stock else ('COMING SOON' if item.status == 'coming_soon' else 'SOLD OUT') -%}
+<li class="listing-card{{ ' is-sold' if label == 'SOLD OUT' }}{{ ' is-soon' if label == 'COMING SOON' }}">
+    <a href="/listing/{{ item.slug }}">
+        <div class="card-media">
+            {% if item.images %}
+                <img src="{{ item.images[0] }}" alt="{{ item.title }}" loading="lazy">
+            {% else %}
+                <div class="card-media-empty">No photo</div>
+            {% endif %}
+            <span class="stock-badge">{{ label }}</span>
+        </div>
+        <div class="card-body">
+            <h3>{{ item.title }}</h3>
+            <p class="card-price">${{ '%.2f'|format(item.price) }}</p>
+        </div>
+    </a>
+</li>
+{%- endmacro %}
+
+{#- A service or lesson as a price-list row: there is nothing to photograph,
+    and a row of grey "No photo" boxes made the shop look empty. -#}
+{% macro service_row(item) -%}
+<li class="price-row{{ '' if item.in_stock else ' is-soon' }}">
+    <a href="/listing/{{ item.slug }}">
+        <span class="price-row-main">
+            <span class="price-row-title">{{ item.title }}</span>
+            {% if item.summary %}<span class="price-row-note">{{ item.summary|truncate(110, end='…') }}</span>{% endif %}
+        </span>
+        <span class="price-row-side">
+            <span class="price-row-price">${{ '%.2f'|format(item.price) }}</span>
+            <span class="price-row-status">{{ 'Book now' if item.in_stock else 'Opening soon' }}</span>
+        </span>
+    </a>
+</li>
+{%- endmacro %}

@@ -1,0 +1,46 @@
+{% extends 'emails/_layout.html' %}
+{#- Sent from the orders page: a cancellation, a return received, or a refund.
+    `amount` is this refund (0 if nothing new was refunded), `refunded_total`
+    everything refunded on the order so far. order['items'], never order.items. -#}
+{% block title %}Order {{ order.number }}: {% if action == 'cancel' %}cancelled{% elif action == 'return' %}return received{% else %}refund issued{% endif %}{% endblock %}
+{% block preheader %}{% if amount %}A refund of ${{ '%.2f'|format(amount) }} is on its way to your card.{% elif action == 'cancel' %}Order {{ order.number }} has been cancelled.{% else %}Order {{ order.number }}: return received.{% endif %}{% endblock %}
+{% block screen_label %}{% if action == 'cancel' %}ORDER CANCELLED{% elif action == 'return' %}RETURN RECEIVED{% else %}REFUND ISSUED{% endif %}{% endblock %}
+{% block screen %}
+<div style="font-size:22px; font-weight:bold; letter-spacing:2px;">{% if action == 'cancel' %}ORDER CANCELLED{% elif action == 'return' %}RETURN RECEIVED{% else %}REFUND ISSUED{% endif %}</div>
+<p style="margin:12px 0 16px;">Hi{% if order.first_name %} {{ order.first_name }}{% endif %}! {% if action == 'cancel' %}Order {{ order.number }} has been cancelled, as requested.{% elif action == 'return' %}Your return for order {{ order.number }} has arrived back safely.{% else %}A refund has been issued for order {{ order.number }}.{% endif %}</p>
+
+{% if amount %}
+<p style="margin:0 0 16px;">A refund of <strong>${{ '%.2f'|format(amount) }}</strong> is on its way to the card you paid with. Your bank usually shows it within {{ arrives }}.</p>
+{% elif refunded_total %}
+<p style="margin:0 0 16px;">Your refund of <strong>${{ '%.2f'|format(refunded_total) }}</strong> has already been issued to the card you paid with.</p>
+{% endif %}
+
+{% if note %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">
+  <tr>
+    <td bgcolor="#9fd9a8" style="background-color:#9fd9a8; border-left:3px solid #1b2a1d; padding:10px 12px; font-family:'Courier New',Courier,monospace; font-size:14px; line-height:1.55; color:#1b2a1d; white-space:pre-line;">{{ note }}</td>
+  </tr>
+</table>
+{% endif %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; border-top:2px solid #1b2a1d; font-family:'Courier New',Courier,monospace; font-size:14px; color:#1b2a1d;">
+  {% for item in order['items'] %}
+  <tr>
+    <td valign="top" style="padding:10px 10px 10px 0;">&#9654; {{ item.title }}{% if (item.quantity or 1) > 1 %} &times;{{ item.quantity }}{% endif %}</td>
+    <td valign="top" align="right" style="padding:10px 0; white-space:nowrap;">${{ '%.2f'|format(item.amount or 0) }}</td>
+  </tr>
+  {% endfor %}
+  <tr>
+    <td style="padding:8px 10px 8px 0; border-top:1px dashed #1b2a1d;">Order total</td>
+    <td align="right" style="padding:8px 0; border-top:1px dashed #1b2a1d; white-space:nowrap;">${{ '%.2f'|format(order.amount) }}</td>
+  </tr>
+  {% if refunded_total %}
+  <tr>
+    <td bgcolor="#444444" style="background-color:#444444; color:#ffffff; padding:8px 10px; font-weight:bold; letter-spacing:1px;">REFUNDED</td>
+    <td bgcolor="#444444" align="right" style="background-color:#444444; color:#ffffff; padding:8px 10px; font-weight:bold; white-space:nowrap;">${{ '%.2f'|format(refunded_total) }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<p style="margin:24px 0 0;">{% if action == 'cancel' %}Sorry it didn't work out this time. New restorations go up regularly at <a href="{{ site }}/shop" style="color:#1b2a1d;">{{ site|replace('https://', '')|replace('http://', '') }}/shop</a>.{% elif action == 'return' %}Thanks for sending it back. Anything else you need, just reply to this email.{% else %}Anything else you need, just reply to this email.{% endif %}</p>
+{% endblock %}

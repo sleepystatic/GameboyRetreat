@@ -27,8 +27,22 @@
     </div>
     {% endif %}
 
-    {% if not items %}
+    {% if total %}
+    {# Every listing lives here, hidden ones included - Hidden only keeps a
+       listing away from customers. #}
+    <nav class="range status-filter" aria-label="Show listings">
+        <a href="/admin/listings" class="{{ 'on' if show == 'all' }}">All {{ total }}</a>
+        {% for value, label in statuses.items() %}
+        <a href="/admin/listings?show={{ value }}" class="{{ 'on' if show == value }}">
+            {{ {'active': 'For sale', 'coming_soon': 'Coming soon', 'hidden': 'Hidden'}.get(value, label) }} {{ counts[value] }}</a>
+        {% endfor %}
+    </nav>
+    {% endif %}
+
+    {% if not total %}
         <p class="empty">No listings yet. <a href="/admin/listings/new">Add the first one</a>.</p>
+    {% elif not items %}
+        <p class="empty">Nothing here. <a href="/admin/listings">Show all listings</a>.</p>
     {% else %}
     <table class="admin-table">
         <thead>
@@ -44,7 +58,7 @@
         </thead>
         <tbody>
         {% for item in items %}
-            <tr class="{{ 'row-sold' if not item.in_stock else '' }}">
+            <tr class="{{ 'row-sold' if not item.in_stock else '' }}{{ ' row-hidden' if item.status == 'hidden' }}">
                 <td class="cell-thumb">
                     {% if item.images %}
                         <img src="{{ item.images[0] }}" alt="">
@@ -54,6 +68,7 @@
                 </td>
                 <td>
                     {{ item.title }}
+                    {% if item.status == 'hidden' %}<span class="flag flag-hidden">hidden</span>{% endif %}
                     {% set dead = item.images_raw|length - item.images|length %}
                     {% if dead > 0 %}
                         <span class="flag flag-warn">{{ dead }} missing photo{{ '' if dead == 1 else 's' }}</span>
@@ -65,6 +80,7 @@
                 <td>${{ '%.2f'|format(item.price) }}</td>
                 <td>
                     <form method="post" action="/admin/listings/{{ item.id }}/stock" class="stock-form">
+                        <input type="hidden" name="show" value="{{ show }}">
                         <input type="number" name="stock" value="{{ item.stock }}" min="0">
                         <select name="status">
                             {% for value, label in statuses.items() %}
@@ -83,7 +99,7 @@
                 </td>
                 <td class="cell-actions">
                     <a href="/admin/listings/{{ item.id }}/edit">Edit</a>
-                    <a href="/listing/{{ item.slug }}" target="_blank" class="muted">View &nearr;</a>
+                    {% if item.status != 'hidden' %}<a href="/listing/{{ item.slug }}" target="_blank" class="muted">View &nearr;</a>{% endif %}
                     <form method="post" action="/admin/listings/{{ item.id }}/delete"
                           class="delete-form"
                           data-title="{{ item.title }}"

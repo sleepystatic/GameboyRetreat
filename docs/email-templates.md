@@ -201,10 +201,13 @@ Gameboy Retreat
 
 ## Sending notes
 
-- **From:** marketing goes from `news.gameboyretreat.com`, never the root domain.
-  Order confirmations keep using `orders@gameboyretreat.com`.
-- **Reply-to:** a real inbox you actually read. Replies to marketing email are the
-  highest-intent messages you'll get.
+- **From:** everything sends as `support@gameboyretreat.com`, the shop's one
+  public address. If the list grows into the thousands, give newsletters their
+  own reputation: verify a subdomain such as `news.gameboyretreat.com` in Resend
+  and send marketing from it, so a spam-complaint spike can't touch order
+  confirmations.
+- **Reply-to:** `support@gameboyretreat.com` - a real inbox you actually read.
+  Replies to marketing email are the highest-intent messages you'll get.
 - **Send Tuesday–Thursday, mid-morning** in your customers' timezone. Weekends
   underperform for retail.
 - **Never buy or scrape a list.** One spam complaint rate spike and your domain

@@ -6,6 +6,19 @@
     <title>Shop in a Working Game Boy | Gameboy Retreat</title>
     <meta name="description" content="Browse and buy refurbished Game Boy, Game Boy Advance and DS handhelds inside a working on-screen Game Boy. D-pad to move, A to select.">
     {% if canonical %}<link rel="canonical" href="{{ canonical }}">{% endif %}
+    <!-- Link previews: this is the page people share, so it gets its own card. -->
+    <meta property="og:site_name" content="Gameboy Retreat">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Shop inside a working Game Boy">
+    <meta property="og:description" content="The whole Gameboy Retreat shop runs inside a Game Boy: D-pad to browse, A to buy. Refurbished handhelds with a 30-day warranty.">
+    {% if canonical %}<meta property="og:url" content="{{ canonical }}">{% endif %}
+    <meta property="og:image" content="{{ og_image }}">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="A Game Boy Advance SP showing the Gameboy Retreat shop menu">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="{{ og_image }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script>
         // The console stays hidden until its shell has loaded and been scaled (style.css); this reveals it regardless after 4s.
@@ -24,8 +37,11 @@
     <link rel="preload" as="image" href="{{ url_for('static', filename='gba_trimmed.webp') }}" media="not all and (orientation: portrait) and (max-width: 900px)">
     <link rel="preload" as="font" href="{{ url_for('static', filename='fonts/pixel-font.ttf') }}" type="font/ttf" crossorigin>
     <script src="https://js.stripe.com/v3/" defer></script>
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
     <script>
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}

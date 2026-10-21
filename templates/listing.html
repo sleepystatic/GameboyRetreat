@@ -6,10 +6,6 @@
 {% block description %}{{ item.summary|truncate(155) if item.summary else item.title ~ ' - professionally refurbished and tested.' }}{% endblock %}
 {% block og_description %}{{ item.summary|truncate(155) if item.summary else item.title }}{% endblock %}
 
-{% block og_image_tag %}
-{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
-{% endblock %}
-
 {% block structured_data %}
 <script type="application/ld+json">
 {{ structured_data|safe }}
@@ -52,11 +48,14 @@
 
         <p class="listing-price">${{ '%.2f'|format(item.price) }}</p>
 
-        <p class="listing-stock {{ 'in-stock' if item.in_stock else 'out-of-stock' }}">
+        {% set coming_soon = item.status == 'coming_soon' %}
+        <p class="listing-stock {{ 'in-stock' if item.in_stock else ('coming-soon' if coming_soon else 'out-of-stock') }}">
             {% if item.is_service %}
-                {{ 'Accepting bookings' if item.in_stock else 'Currently closed' }}
+                {{ 'Accepting bookings' if item.in_stock else ('Opening soon' if coming_soon else 'Currently closed') }}
             {% elif item.in_stock %}
                 Available &mdash; {{ item.stock }} in stock
+            {% elif coming_soon %}
+                Coming soon
             {% else %}
                 Sold out
             {% endif %}
@@ -77,10 +76,20 @@
             <p class="buy-note">
                 Checkout runs through the Game Boy interface. Secure payment via Stripe.
             </p>
+        {% elif coming_soon %}
+            <p class="buy-note">
+                {% if item.is_service %}
+                Bookings open soon. Join the list below to hear first, or
+                <a href="mailto:{{ support_email }}">email us</a> about your console.
+                {% else %}
+                Not on sale yet. Join the list below to see the photos before it goes
+                public, or <a href="mailto:{{ support_email }}">ask about it</a>.
+                {% endif %}
+            </p>
         {% else %}
             <p class="buy-note">
                 This one has found a home. <a href="/shop">See what else is available</a>
-                or <a href="mailto:t.bryan.dev@gmail.com">ask us to source one</a>.
+                or <a href="mailto:{{ support_email }}">ask us to source one</a>.
             </p>
         {% endif %}
 
@@ -107,39 +116,30 @@
                 <dt>Warranty</dt>
                 <dd>30 days &mdash; replacement or full refund if it fails</dd>
                 <dt>Returns</dt>
-                <dd>30 days if faulty or not as described</dd>
-                <dt>Ships from</dt>
-                <dd>Stockton, CA</dd>
+                <dd>30 days if faulty or not as described &mdash; <a href="/shipping-returns">details</a></dd>
+                <dt>Shipping</dt>
+                <dd>Free to the US and Canada, from Stockton, CA</dd>
             {% endif %}
         </dl>
     </div>
 </article>
 
 {% if related %}
+{% from '_cards.html' import listing_card, service_row %}
 <section class="related">
     <h2>More {{ category_name }}</h2>
+    {% set consoles = related|rejectattr('is_service')|list %}
+    {% set labour = related|selectattr('is_service')|list %}
+    {% if consoles %}
     <ul class="listing-grid">
-        {% for other in related %}
-        <li class="listing-card {{ 'is-sold' if not other.in_stock else '' }}">
-            <a href="/listing/{{ other.slug }}">
-                <div class="card-media">
-                    {% if other.images %}
-                        <img src="{{ other.images[0] }}" alt="{{ other.title }}" loading="lazy">
-                    {% else %}
-                        <div class="card-media-empty">No photo</div>
-                    {% endif %}
-                    <span class="stock-badge">
-                        {{ 'SOLD OUT' if not other.in_stock else 'AVAILABLE' }}
-                    </span>
-                </div>
-                <div class="card-body">
-                    <h3>{{ other.title }}</h3>
-                    <p class="card-price">${{ '%.2f'|format(other.price) }}</p>
-                </div>
-            </a>
-        </li>
-        {% endfor %}
+        {% for other in consoles %}{{ listing_card(other) }}{% endfor %}
     </ul>
+    {% endif %}
+    {% if labour %}
+    <ul class="price-list">
+        {% for other in labour %}{{ service_row(other) }}{% endfor %}
+    </ul>
+    {% endif %}
 </section>
 {% endif %}
 

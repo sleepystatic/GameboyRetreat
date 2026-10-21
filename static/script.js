@@ -142,6 +142,7 @@ const MENUS = {
         { label: 'Creator', action: 'menu:creator-menu' },
         { label: 'Contact', action: 'menu:contact-menu' },
         { label: 'Static Designs', action: 'external:https://staticdesigns.dev/' },
+        { label: 'Shipping & Returns', action: 'menu:shipping-menu' },
         { label: 'Privacy Policy', action: 'menu:privacy-menu' },
     ],
     'creator-menu': [
@@ -149,10 +150,21 @@ const MENUS = {
         { label: 'Back', action: 'menu:about-menu' },
     ],
     'contact-menu': [
-        { label: 'Email: t.bryan.dev@gmail.com', info: true },
+        { label: 'Email: support@gameboyretreat.com', info: true },
         { label: 'Location: Stockton, CA', info: true },
         { label: 'Chat: Use the chat bot in the corner!', info: true },
         { label: 'Response Time: Within 24 hours', info: true },
+        { label: 'Back', action: 'menu:about-menu' },
+    ],
+    // Summary only - the full policy lives at /shipping-returns. Keep this in
+    // step with templates/shipping_returns.html if either changes.
+    'shipping-menu': [
+        { label: 'Free shipping to the US and Canada, with tracking within 2 business '
+               + 'days. Cancel for a full refund any time before it ships. 30-day '
+               + 'warranty: if it fails or is not as described, it is repaired, '
+               + 'replaced or refunded, and return shipping is on us.',
+          info: true },
+        { label: 'Read Full Policy', action: 'external:/shipping-returns' },
         { label: 'Back', action: 'menu:about-menu' },
     ],
     // Summary only - the full policy lives at /privacy so there is one source of

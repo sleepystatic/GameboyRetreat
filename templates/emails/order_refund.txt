@@ -1,0 +1,25 @@
+{#- Plain-text twin of order_refund.html, for clients that show text. -#}
+GAMEBOY RETREAT
+
+{% if action == 'cancel' %}ORDER CANCELLED{% elif action == 'return' %}RETURN RECEIVED{% else %}REFUND ISSUED{% endif %}
+
+Hi{% if order.first_name %} {{ order.first_name }}{% endif %}! {% if action == 'cancel' %}Order {{ order.number }} has been cancelled, as requested.{% elif action == 'return' %}Your return for order {{ order.number }} has arrived back safely.{% else %}A refund has been issued for order {{ order.number }}.{% endif %}
+{% if amount %}
+A refund of ${{ '%.2f'|format(amount) }} is on its way to the card you paid with. Your bank usually shows it within {{ arrives }}.
+{% elif refunded_total %}
+Your refund of ${{ '%.2f'|format(refunded_total) }} has already been issued to the card you paid with.
+{% endif %}
+{%- if note %}
+{{ note }}
+{% endif %}
+{% for item in order['items'] -%}
+- {{ item.title }}{% if (item.quantity or 1) > 1 %} x{{ item.quantity }}{% endif %}   ${{ '%.2f'|format(item.amount or 0) }}
+{% endfor -%}
+Order total   ${{ '%.2f'|format(order.amount) }}
+{% if refunded_total %}REFUNDED   ${{ '%.2f'|format(refunded_total) }}
+{% endif %}
+{% if action == 'cancel' %}Sorry it didn't work out this time. New restorations go up regularly at {{ site }}/shop{% elif action == 'return' %}Thanks for sending it back.{% else %}Anything else you need, just reply to this email.{% endif %}
+
+Questions? Just reply to this email, or write to {{ support_email }}.
+Shipping & returns: {{ site }}/shipping-returns
+Gameboy Retreat - Stockton, CA - {{ site }}

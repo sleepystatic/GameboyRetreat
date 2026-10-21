@@ -1,5 +1,5 @@
 from flask import (Flask, render_template, request, jsonify, redirect, Response,
-                   abort, flash)
+                   abort, flash, send_from_directory)
 from markupsafe import escape
 from werkzeug.middleware.proxy_fix import ProxyFix
 import stripe
@@ -7,11 +7,15 @@ import os
 import re
 import json
 import hmac
+import hashlib
 import threading
 import unicodedata
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 from urllib.parse import quote
 import requests
 from dotenv import load_dotenv
@@ -84,14 +88,18 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
 MAIL_RECIPIENT = os.environ.get('MAIL_RECIPIENT')
 RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
-# Transactional mail (receipts, seller submissions) sends from the root domain.
-# Marketing sends from a subdomain so that if a newsletter ever collects spam
-# complaints, the damaged reputation is confined there and order confirmations
-# keep landing in inboxes.
-MAIL_FROM = os.environ.get('MAIL_FROM', 'Gameboy Retreat <orders@gameboyretreat.com>')
-MARKETING_FROM = os.environ.get(
-    'MARKETING_FROM', 'Gameboy Retreat <hello@news.gameboyretreat.com>'
-)
+# The shop's one public address: shown on every page, in the Game Boy's Contact
+# menu, and set as reply-to on customer email. It is a real mailbox (Namecheap
+# Private Email), so customers can also write to it directly.
+SUPPORT_EMAIL = os.environ.get('SUPPORT_EMAIL', 'support@gameboyretreat.com')
+
+# Everything sends as support@ too, so a customer who replies, or copies the
+# From address, reaches the inbox that is actually read. Marketing can move to
+# a subdomain later (verify e.g. news.gameboyretreat.com in Resend, then set
+# MARKETING_FROM) if a large list ever needs its sending reputation kept apart
+# from order confirmations. At the shop's size one address is the better trade.
+MAIL_FROM = os.environ.get('MAIL_FROM', f'Gameboy Retreat <{SUPPORT_EMAIL}>')
+MARKETING_FROM = os.environ.get('MARKETING_FROM', f'Gameboy Retreat <{SUPPORT_EMAIL}>')
 
 # Resend Audience that newsletter signups are added to.
 RESEND_AUDIENCE_ID = os.environ.get('RESEND_AUDIENCE_ID')
@@ -413,7 +421,39 @@ ORDER_EMAILS = {
 ORDER_COLUMNS = ('id', 'session_id', 'customer_email', 'customer_name', 'amount',
                  'items', 'shipping_address', 'status', 'tracking_number', 'carrier',
                  'created_at', 'shipped_at', 'surface', 'ref', 'last_ref',
-                 'confirmation_sent_at', 'shipped_email_sent_at')
+                 'confirmation_sent_at', 'shipped_email_sent_at', 'payment_intent',
+                 'cancelled_at', 'returned_at', 'restocked_at')
+
+# Refunds, cancellations and returns (the orders page's "Cancel / return /
+# refund" form). action: (form label, email subject)
+REFUND_ACTIONS = {
+    'cancel': ('Cancel order - not shipped yet', 'Order {number} cancelled - Gameboy Retreat'),
+    'return': ('Return received', 'Return received for order {number} - Gameboy Retreat'),
+    'refund': ('Refund only - nothing coming back', 'Refund issued for order {number} - Gameboy Retreat'),
+}
+
+# Why - for your records only. The customer never sees this.
+REFUND_REASONS = {
+    'changed_mind': 'Changed their mind',
+    'faulty': 'Faulty',
+    'not_as_described': 'Not as described',
+    'damaged': 'Damaged in shipping',
+    'lost': 'Lost in shipping',
+    'goodwill': 'Goodwill / partial refund',
+    'other': 'Other',
+}
+
+# Stripe refund statuses that mean the money is going back. 'failed' and
+# 'canceled' refunds are listed on the order but not counted.
+REFUND_COUNTED = ('succeeded', 'pending', 'requires_action')
+
+# Stripe events that can create or change a refund. Each one triggers a full
+# re-read of the payment's refunds, so their order and duplicates don't matter.
+REFUND_EVENTS = ('charge.refunded', 'charge.refund.updated',
+                 'refund.created', 'refund.updated', 'refund.failed')
+
+# What Stripe tells customers about refund timing.
+REFUND_ARRIVES = '5-10 business days'
 
 
 def order_number(order_id):
@@ -473,10 +513,69 @@ def order_from_row(row):
 
 
 def load_orders(where='TRUE', params=(), limit=100):
+    """Orders, newest first, each with its refunds and what is left to refund."""
     with get_cursor() as cursor:
         cursor.execute(f"SELECT {', '.join(ORDER_COLUMNS)} FROM orders WHERE {where} "
                        f"ORDER BY created_at DESC LIMIT {int(limit)}", params)
-        return [order_from_row(row) for row in cursor.fetchall()]
+        orders = [order_from_row(row) for row in cursor.fetchall()]
+        if not orders:
+            return orders
+        cursor.execute('''
+            SELECT order_id, stripe_refund_id, amount, status, action, reason, note,
+                   source, created_at
+            FROM refunds WHERE order_id = ANY(%s) ORDER BY created_at, id
+        ''', ([o['id'] for o in orders],))
+        refund_rows = cursor.fetchall()
+        # The consoles a cancellation or return can put back on the shelf: the
+        # checkout's stock holds, which are kept (as 'consumed') after the sale.
+        cursor.execute('''
+            SELECT checkout_session_id, SUM(quantity) FROM reservations
+            WHERE checkout_session_id = ANY(%s) AND status = 'consumed'
+            GROUP BY checkout_session_id
+        ''', ([o['session_id'] for o in orders],))
+        units = dict(cursor.fetchall())
+
+    refunds = {}
+    for (order_id, stripe_id, amount, status, action, reason, note,
+         source, created) in refund_rows:
+        status = status or 'succeeded'
+        refunds.setdefault(order_id, []).append({
+            'stripe_id': stripe_id,
+            'amount': float(amount),
+            'status': status,
+            'counted': status in REFUND_COUNTED,
+            'action': action,
+            'reason': REFUND_REASONS.get(reason, ''),
+            'note': note or '',
+            'source': source,
+            'date': shop_date(created),
+        })
+    for order in orders:
+        summarize_refunds(order, refunds.get(order['id'], []),
+                          units.get(order['session_id'], 0))
+    return orders
+
+
+def summarize_refunds(order, refunds, stock_units):
+    """Add the refund totals and the order's overall state to an order dict."""
+    refunded = round(sum(r['amount'] for r in refunds if r['counted']), 2)
+    order['refunds'] = refunds
+    order['refunded'] = refunded
+    order['refundable'] = round(max(0.0, order['amount'] - refunded), 2)
+    order['refund_state'] = ('none' if refunded <= 0 else
+                             'full' if order['refundable'] <= 0 else 'partial')
+    order['stock_units'] = int(stock_units or 0)
+    if order['status'] in ('cancelled', 'returned'):
+        order['state'] = order['status']
+    elif order['tracking_number']:
+        order['state'] = 'shipped'
+    elif order['refund_state'] == 'full':
+        order['state'] = 'refunded'     # refunded in Stripe; nothing to ship
+    elif order['address_lines']:
+        order['state'] = 'to_ship'
+    else:
+        order['state'] = 'no_shipping'
+    return order
 
 
 def load_order(order_id):
@@ -522,13 +621,155 @@ def send_order_email(order_id, kind, force=False):
         bcc = (MAIL_RECIPIENT if kind == 'confirmation' and MAIL_RECIPIENT
                and MAIL_RECIPIENT.lower() != order['customer_email'].lower() else None)
         sent = send_email(subject, text, to=order['customer_email'],
-                          reply_to=MAIL_RECIPIENT, html=html, bcc=bcc)
+                          reply_to=SUPPORT_EMAIL, html=html, bcc=bcc)
 
     if sent or not force:
         with get_cursor(commit=True) as cursor:
             cursor.execute(f"UPDATE orders SET {column} = {'NOW()' if sent else 'NULL'} "
                            "WHERE id = %s", (order_id,))
     return 'sent' if sent else 'failed'
+
+
+# ---------- refunds, cancellations, returns ----------
+#
+# Refunds are made through Stripe - from the orders page, or in the Stripe
+# dashboard - and recorded in the refunds table by Stripe's refund id, so the
+# same refund arriving from both places is stored once. The webhook re-reads a
+# payment's refunds whenever one changes (REFUND_EVENTS).
+
+def order_payment_intent(order):
+    """The order's Stripe PaymentIntent id. Orders saved before it was recorded
+    get it from their Checkout Session, and keep it."""
+    if order.get('payment_intent'):
+        return order['payment_intent']
+    session = stripe.checkout.Session.retrieve(order['session_id'])
+    payment_intent = session.get('payment_intent')
+    if isinstance(payment_intent, dict):
+        payment_intent = payment_intent.get('id')
+    if payment_intent:
+        with get_cursor(commit=True) as cursor:
+            cursor.execute('UPDATE orders SET payment_intent = %s WHERE id = %s',
+                           (payment_intent, order['id']))
+        order['payment_intent'] = payment_intent
+    return payment_intent
+
+
+def record_refund(order_id, refund, source, action=None, reason=None, note=None,
+                  token=None):
+    """Store one Stripe refund, or update its status. The orders page's details
+    (what happened, why, the note) win over the webhook's bare copy, whichever
+    of the two arrives first."""
+    created = refund.get('created')
+    created_at = (datetime.fromtimestamp(created, timezone.utc).replace(tzinfo=None)
+                  if created else datetime.now(timezone.utc).replace(tzinfo=None))
+    with get_cursor(commit=True) as cursor:
+        cursor.execute('''
+            INSERT INTO refunds (order_id, stripe_refund_id, amount, status, action,
+                                 reason, note, source, created_at, request_token)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (stripe_refund_id) DO UPDATE SET
+                amount = EXCLUDED.amount,
+                status = EXCLUDED.status,
+                action = COALESCE(EXCLUDED.action, refunds.action),
+                reason = COALESCE(EXCLUDED.reason, refunds.reason),
+                note = COALESCE(EXCLUDED.note, refunds.note),
+                request_token = COALESCE(EXCLUDED.request_token, refunds.request_token),
+                source = CASE WHEN EXCLUDED.source = 'admin' THEN 'admin'
+                              ELSE refunds.source END
+        ''', (order_id, refund['id'], Decimal(int(refund['amount'])) / 100,
+              refund.get('status') or 'succeeded', action, reason, note or None,
+              source, created_at, token))
+
+
+def sync_refunds(payment_intent):
+    """Copy every refund Stripe has for a payment into the refunds table.
+    Returns the order id, or None when the payment is not one of the shop's."""
+    with get_cursor() as cursor:
+        cursor.execute('SELECT id FROM orders WHERE payment_intent = %s', (payment_intent,))
+        row = cursor.fetchone()
+    if row is None:
+        # An order saved before payment_intent was recorded: find it through
+        # its Checkout Session.
+        sessions = stripe.checkout.Session.list(payment_intent=payment_intent, limit=1)
+        for session in sessions.get('data') or []:
+            with get_cursor(commit=True) as cursor:
+                cursor.execute('UPDATE orders SET payment_intent = %s '
+                               'WHERE session_id = %s RETURNING id',
+                               (payment_intent, session.get('id')))
+                row = cursor.fetchone()
+    if row is None:
+        return None
+
+    for refund in stripe.Refund.list(payment_intent=payment_intent, limit=100).get('data') or []:
+        record_refund(row[0], refund, 'stripe')
+    return row[0]
+
+
+def restock_order(order_id):
+    """Put an order's consoles back in stock - once per order, however often it
+    is asked. Returns [(title, quantity, listing status)], or None if the order
+    was already restocked."""
+    with get_cursor(commit=True) as cursor:
+        cursor.execute('UPDATE orders SET restocked_at = NOW() '
+                       'WHERE id = %s AND restocked_at IS NULL RETURNING session_id',
+                       (order_id,))
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        cursor.execute('''
+            SELECT r.listing_id, SUM(r.quantity), i.title, i.status
+            FROM reservations r JOIN inventory i ON i.id = r.listing_id
+            WHERE r.checkout_session_id = %s AND r.status = 'consumed'
+            GROUP BY r.listing_id, i.title, i.status
+        ''', (row[0],))
+        lines = cursor.fetchall()
+        for listing_id, quantity, _, _ in lines:
+            cursor.execute('UPDATE inventory SET stock = stock + %s WHERE id = %s',
+                           (quantity, listing_id))
+    return [(title, int(quantity), status) for _, quantity, title, status in lines]
+
+
+def restock_message(lines):
+    if lines is None:
+        return 'Already back in stock.'
+    if not lines:
+        return 'Nothing to restock (no consoles in this order).'
+    units = sum(q for _, q, _ in lines)
+    message = (f"{units} unit{'' if units == 1 else 's'} back in stock: "
+               + ', '.join(title for title, _, _ in lines) + '.')
+    hidden = [title for title, _, status in lines if status != 'active']
+    if hidden:
+        message += (' Not for sale until you set it to "For sale" in Inventory: '
+                    + ', '.join(hidden) + '.')
+    return message
+
+
+def render_refund_email(order, action, amount, note='', refunded_total=None):
+    """(subject, html, text) for a cancellation, return or refund email.
+    `amount` is this refund (0 when nothing new was refunded); the total
+    defaults to everything already recorded on the order."""
+    context = {
+        'order': order,
+        'site': site_root(),
+        'action': action,
+        'amount': float(amount),
+        'refunded_total': float(order['refunded'] if refunded_total is None
+                                else refunded_total),
+        'note': note,
+        'arrives': REFUND_ARRIVES,
+    }
+    return (REFUND_ACTIONS[action][1].format(number=order['number']),
+            render_template('emails/order_refund.html', **context),
+            render_template('emails/order_refund.txt', **context))
+
+
+def send_refund_email(order_id, action, amount, note=''):
+    order = load_order(order_id)        # fresh, so the totals include this refund
+    if not order or '@' not in (order['customer_email'] or ''):
+        return False
+    subject, html, text = render_refund_email(order, action, amount, note)
+    return send_email(subject, text, to=order['customer_email'],
+                      reply_to=SUPPORT_EMAIL, html=html)
 
 
 @app.route('/admin/dashboard')
@@ -539,8 +780,14 @@ def admin_dashboard():
         orders = load_orders()
     except Exception as e:
         return f"Error: {e}", 500
+    for order in orders:
+        # One per form render: Stripe's idempotency key, so a double-clicked
+        # refund button refunds once.
+        order['refund_token'] = uuid.uuid4().hex
     return render_template('admin_dashboard.html', orders=orders, carriers=CARRIERS,
-                           emails_on=bool(RESEND_API_KEY), ship_within=TRACKING_WITHIN)
+                           emails_on=bool(RESEND_API_KEY), ship_within=TRACKING_WITHIN,
+                           refund_actions=REFUND_ACTIONS, refund_reasons=REFUND_REASONS,
+                           refund_arrives=REFUND_ARRIVES)
 
 
 @app.route('/admin/orders/<int:order_id>/email/<kind>', methods=['GET', 'POST'])
@@ -602,6 +849,129 @@ def admin_order_ship(order_id):
     return redirect(f'/admin/dashboard#order-{order_id}')
 
 
+@app.route('/admin/orders/<int:order_id>/refund', methods=['POST'])
+@login_required
+def admin_order_refund(order_id):
+    """Cancel an order, record a return, or refund part or all of it - the
+    money goes back through Stripe, to the card the customer paid with."""
+    order = load_order(order_id)
+    if not order:
+        abort(404)
+    back = redirect(f'/admin/dashboard#order-{order_id}')
+    number = order['number']
+
+    action = request.form.get('action', '')
+    reason = request.form.get('reason', '')
+    note = (request.form.get('note') or '').strip()[:500]
+    token = request.form.get('token', '')
+    if (action not in REFUND_ACTIONS or reason not in REFUND_REASONS
+            or not re.fullmatch(r'[0-9a-f]{32}', token)):
+        flash('Choose what happened and why, then try again.', 'error')
+        return back
+    try:
+        amount = Decimal((request.form.get('amount') or '0').strip().lstrip('$')) \
+            .quantize(Decimal('0.01'))
+    except (InvalidOperation, ValueError):
+        flash('Enter the refund as a number, like 175 or 49.99.', 'error')
+        return back
+
+    refundable = Decimal(str(order['refundable']))
+    if amount < 0 or amount > refundable:
+        flash(f"{number}: the most you can refund is ${refundable:.2f}.", 'error')
+        return back
+    if action == 'refund' and amount == 0:
+        flash(f"{number}: enter how much to refund.", 'error')
+        return back
+    if action == 'cancel' and order['tracking_number']:
+        flash(f"{number} has already shipped, so it can't be cancelled - "
+              "use Return received when it comes back.", 'error')
+        return back
+    with get_cursor() as cursor:
+        cursor.execute('SELECT 1 FROM refunds WHERE request_token = %s', (token,))
+        if cursor.fetchone():
+            flash(f"{number}: that refund already went through - nothing was done twice.")
+            return back
+
+    done = []
+    if amount > 0:
+        try:
+            payment_intent = order_payment_intent(order)
+            if not payment_intent:
+                raise ValueError('Stripe has no payment for this order')
+            refund = stripe.Refund.create(
+                payment_intent=payment_intent,
+                amount=int(amount * 100),
+                reason='requested_by_customer',
+                metadata={'order': number, 'action': action, 'reason': reason},
+                idempotency_key=f'gbr-refund-{order_id}-{token}',
+            )
+        except Exception as e:
+            message = getattr(e, 'user_message', None) or str(e)
+            flash(f"Stripe did not refund {number}: {message}. Nothing was changed.", 'error')
+            return back
+        record_refund(order_id, refund, 'admin', action, reason, note, token)
+        status = refund.get('status') or 'succeeded'
+        if status in ('failed', 'canceled'):
+            flash(f"Stripe reports the {number} refund as {status} - check it in the "
+                  "Stripe dashboard. Nothing else was changed.", 'error')
+            return back
+        done.append(f"Refunded ${amount:.2f} to the customer's card"
+                    + (' (pending at the bank).' if status != 'succeeded' else '.'))
+
+    if action in ('cancel', 'return'):
+        column = 'cancelled_at' if action == 'cancel' else 'returned_at'
+        with get_cursor(commit=True) as cursor:
+            cursor.execute(f"UPDATE orders SET status = %s, {column} = COALESCE({column}, NOW()) "
+                           "WHERE id = %s", ('cancelled' if action == 'cancel' else 'returned',
+                                             order_id))
+        done.append('Order marked cancelled.' if action == 'cancel' else 'Return recorded.')
+
+    if request.form.get('restock') == '1':
+        done.append(restock_message(restock_order(order_id)))
+
+    category = 'message'
+    if request.form.get('notify') == '1':
+        if send_refund_email(order_id, action, amount, note):
+            done.append(f"Emailed {order['customer_email']}.")
+        else:
+            done.append('The email to the customer did not send - see the server log.')
+            category = 'error'
+
+    flash(f"{number}: " + ' '.join(done), category)
+    return back
+
+
+@app.route('/admin/orders/<int:order_id>/restock', methods=['POST'])
+@login_required
+def admin_order_restock(order_id):
+    """Put a refunded order's consoles back on sale - for refunds made in the
+    Stripe dashboard, which can't know whether anything came back."""
+    if not load_order(order_id):
+        abort(404)
+    flash(f"{order_number(order_id)}: {restock_message(restock_order(order_id))}")
+    return redirect(f'/admin/dashboard#order-{order_id}')
+
+
+@app.route('/admin/orders/<int:order_id>/email/refund')
+@login_required
+def admin_refund_email_preview(order_id):
+    """The cancellation / return / refund email, filled in from the form."""
+    order = load_order(order_id)
+    if not order:
+        abort(404)
+    action = request.args.get('action', 'refund')
+    if action not in REFUND_ACTIONS:
+        action = 'refund'
+    try:
+        amount = Decimal((request.args.get('amount') or str(order['refundable'])).lstrip('$'))
+    except (InvalidOperation, ValueError):
+        amount = Decimal(str(order['refundable']))
+    amount = max(Decimal('0'), min(amount, Decimal(str(order['refundable']))))
+    note = (request.args.get('note') or '').strip()[:500]
+    return render_refund_email(order, action, amount, note,
+                               refunded_total=order['refunded'] + float(amount))[1]
+
+
 @app.route('/admin/logout')
 @login_required
 def admin_logout():
@@ -612,14 +982,23 @@ def admin_logout():
 @app.route('/admin/listings')
 @login_required
 def admin_listings():
-    """Inventory overview with links to edit each row."""
+    """Inventory overview with links to edit each row - hidden listings included:
+    Hidden only keeps a listing away from customers."""
     try:
-        items = fetch_listings()
+        everything = fetch_listings(include_hidden=True)
     except Exception as e:
         return f"Error loading inventory: {e}", 500
+    show = request.args.get('show', 'all')
+    if show not in LISTING_STATUSES:
+        show = 'all'
+    counts = {status: sum(1 for i in everything if i['status'] == status)
+              for status in LISTING_STATUSES}
     return render_template(
         'admin_listings.html',
-        items=items,
+        items=[i for i in everything if show == 'all' or i['status'] == show],
+        total=len(everything),
+        counts=counts,
+        show=show,
         categories=category_labels(),
         statuses=LISTING_STATUSES,
         storage_ok=storage_configured(),
@@ -739,7 +1118,7 @@ def admin_listing_new():
 LISTING_STATUSES = {
     'active': 'For sale',
     'coming_soon': 'Coming soon (visible, not buyable)',
-    'hidden': 'Hidden (not shown anywhere)',
+    'hidden': 'Hidden from customers',
 }
 
 
@@ -760,21 +1139,31 @@ def admin_analytics():
 
     window = "created_at > NOW() - make_interval(days => %s)"
 
+    # Orders as sales: revenue is what was kept after refunds, and a cancelled
+    # or returned order is not counted as a sale.
+    sales = """(SELECT o.created_at, o.ref, o.surface,
+                       o.status NOT IN ('cancelled', 'returned') AS is_sale,
+                       o.amount - COALESCE((SELECT SUM(r.amount) FROM refunds r
+                                            WHERE r.order_id = o.id
+                                              AND r.status IN %s), 0) AS kept
+                FROM orders o) AS sales"""
+
     try:
         visitors = q(f"""SELECT COUNT(DISTINCT session_id) FROM events
                          WHERE type='pageview' AND {window}""", (days,))[0][0]
         pageviews = q(f"SELECT COUNT(*) FROM events WHERE type='pageview' AND {window}",
                       (days,))[0][0]
-        order_rows = q(f"""SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM orders
-                           WHERE {window}""", (days,))[0]
+        order_rows = q(f"""SELECT COUNT(*) FILTER (WHERE is_sale), COALESCE(SUM(kept), 0)
+                           FROM {sales} WHERE {window}""", (REFUND_COUNTED, days))[0]
 
         # --- by source: visitors from events, orders and revenue from orders ---
         source_visits = dict(q(f"""
             SELECT COALESCE(ref, 'direct'), COUNT(DISTINCT session_id)
             FROM events WHERE type='pageview' AND {window} GROUP BY 1""", (days,)))
         source_orders = {r[0]: (r[1], float(r[2])) for r in q(f"""
-            SELECT COALESCE(ref, 'direct'), COUNT(*), COALESCE(SUM(amount), 0)
-            FROM orders WHERE {window} GROUP BY 1""", (days,))}
+            SELECT COALESCE(ref, 'direct'), COUNT(*) FILTER (WHERE is_sale),
+                   COALESCE(SUM(kept), 0)
+            FROM {sales} WHERE {window} GROUP BY 1""", (REFUND_COUNTED, days))}
 
         sources = []
         for name in set(source_visits) | set(source_orders):
@@ -833,9 +1222,10 @@ def admin_analytics():
                       FROM events WHERE type='pageview' AND {window}
                       GROUP BY d ORDER BY d""", (days,))
 
-        surfaces = q(f"""SELECT COALESCE(surface, 'unknown'), COUNT(*),
-                                COALESCE(SUM(amount), 0)
-                         FROM orders WHERE {window} GROUP BY 1 ORDER BY 2 DESC""", (days,))
+        surfaces = q(f"""SELECT COALESCE(surface, 'unknown'), COUNT(*) FILTER (WHERE is_sale),
+                                COALESCE(SUM(kept), 0)
+                         FROM {sales} WHERE {window} GROUP BY 1 ORDER BY 2 DESC""",
+                     (REFUND_COUNTED, days))
     except Exception as e:
         return f"Analytics query failed: {e}", 500
 
@@ -1065,7 +1455,10 @@ def admin_update_stock(listing_id):
     except Exception as e:
         return f"Could not update listing: {e}", 500
 
-    return redirect('/admin/listings')
+    # Back to the same filtered view (All / For sale / Coming soon / Hidden).
+    show = request.form.get('show', '')
+    return redirect(f'/admin/listings?show={show}' if show in LISTING_STATUSES
+                    else '/admin/listings')
 
 # ============================================================
 # SUPABASE STORAGE
@@ -1742,6 +2135,38 @@ def init_db():
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_email_sent_at TIMESTAMP"
             )
 
+            # Refunds, cancellations and returns. payment_intent is how Stripe's
+            # refund events are matched back to an order; restocked_at stops a
+            # cancelled order putting its consoles back on sale twice.
+            cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_intent TEXT")
+            cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP")
+            cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS returned_at TIMESTAMP")
+            cursor.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS restocked_at TIMESTAMP")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS orders_payment_intent_idx ON orders (payment_intent)"
+            )
+            # One row per Stripe refund, whether it was made on the orders page
+            # or in the Stripe dashboard. stripe_refund_id is the de-duplication
+            # key: the same refund reported by both is stored once.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS refunds (
+                    id SERIAL PRIMARY KEY,
+                    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                    stripe_refund_id TEXT UNIQUE,
+                    amount NUMERIC(10,2) NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'succeeded',
+                    action TEXT,
+                    reason TEXT,
+                    note TEXT,
+                    source TEXT NOT NULL DEFAULT 'stripe',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute("CREATE INDEX IF NOT EXISTS refunds_order_idx ON refunds (order_id)")
+            # The orders page form's one-time token: a replayed submit is
+            # recognised and does nothing twice (no second email either).
+            cursor.execute("ALTER TABLE refunds ADD COLUMN IF NOT EXISTS request_token TEXT")
+
             # First-party visit and interaction log. No IP address, no user
             # agent, no cookies - a random per-tab session id is the only link
             # between events, and it cannot identify anyone.
@@ -1868,7 +2293,7 @@ def init_db():
             # table is world-readable and writable to anyone holding the anon
             # key. Flask connects as the owner and is unaffected.
             for table in ('sellers', 'orders', 'inventory', 'reservations',
-                          'subscribers', 'events', 'categories'):
+                          'subscribers', 'events', 'categories', 'refunds'):
                 cursor.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
 
         backfill_slugs()
@@ -1939,6 +2364,25 @@ def index():
     featured = [i for i in items if i['in_stock'] and not i['is_service']][:3]
     services = [i for i in items if i['in_stock'] and i['is_service']][:3]
 
+    root = site_root()
+    # Who the shop is, for search engines: name, logo, contact, and the
+    # marketplace profiles that carry its reviews.
+    organization = {
+        '@context': 'https://schema.org',
+        '@type': 'OnlineStore',
+        'name': 'Gameboy Retreat',
+        'url': root + '/',
+        'logo': root + '/static/icons/icon-512.png',
+        'image': share_image_url('gameboy-retreat.jpg'),
+        'description': 'Refurbished Game Boy, Game Boy Advance and Nintendo DS '
+                       'handhelds, restored by hand in Stockton, California.',
+        'email': SUPPORT_EMAIL,
+        'address': {'@type': 'PostalAddress', 'addressLocality': 'Stockton',
+                    'addressRegion': 'CA', 'addressCountry': 'US'},
+        'sameAs': [p['url'] for p in REVIEW_PROFILES if p['url']],
+        'hasMerchantReturnPolicy': return_policy_ld(),
+    }
+
     return render_template(
         'landing.html',
         featured=featured,
@@ -1946,7 +2390,8 @@ def index():
         available_count=count_available_consoles(items),
         review_profiles=[p for p in REVIEW_PROFILES if p['url']],
         hero_demo=hero_demo_data(items),
-        canonical=site_root() + '/',
+        canonical=root + '/',
+        structured_data=ld_json(organization),
     )
 
 
@@ -1956,13 +2401,32 @@ def index():
 # interactive debugger (console_path defaults to "/console") and intercepts it
 # before Flask routing. The route would work under gunicorn and break under
 # `python app.py`, which is the worst kind of bug to own.
-PRIVACY_UPDATED = 'October 1, 2026'
+PRIVACY_UPDATED = 'October 20, 2026'
 
 
 @app.route('/privacy')
 def privacy():
     return render_template('privacy.html', updated=PRIVACY_UPDATED,
                            canonical=site_root() + '/privacy')
+
+
+# Change this date whenever templates/shipping_returns.html changes, and keep
+# the Game Boy's summary (MENUS['shipping-menu'] in static/script.js) in step.
+SHIPPING_POLICY_UPDATED = 'October 20, 2026'
+
+
+@app.route('/shipping-returns')
+def shipping_returns():
+    return render_template('shipping_returns.html', updated=SHIPPING_POLICY_UPDATED,
+                           ship_within=TRACKING_WITHIN, refund_arrives=REFUND_ARRIVES,
+                           canonical=site_root() + '/shipping-returns')
+
+
+@app.route('/returns')
+@app.route('/shipping')
+def shipping_returns_alias():
+    """The addresses people guess."""
+    return redirect('/shipping-returns', code=301)
 
 
 @app.route('/play')
@@ -1973,7 +2437,8 @@ def console_view():
                        for c in load_categories()]
     return render_template('index.html', stripe_key=STRIPE_PUBLISHABLE_KEY,
                            canonical=site_root() + '/play',
-                           shop_categories=shop_categories)
+                           shop_categories=shop_categories,
+                           og_image=share_image_url('shop-in-a-game-boy.jpg'))
 
 
 @app.route('/health')
@@ -2463,11 +2928,21 @@ def count_available_consoles(items):
     return sum(1 for i in items if i['in_stock'] and not i['is_service'])
 
 
+def worth_showing(item):
+    """Does this listing earn a place on /shop and in the sitemap? Anything
+    buyable, any service or lesson, and any console with a photo (sold ones
+    show that things sell). A sold or not-ready console with no photo would
+    only be a grey box - its page still works for old links, but it is kept
+    out of the shop and out of search results."""
+    return item['in_stock'] or item['is_service'] or bool(item['images'])
+
+
 @app.route('/shop')
 def shop_index():
-    """Crawlable grid of every listing, sold ones included."""
+    """Crawlable grid of every console worth showing, with services and lessons
+    as a price list."""
     try:
-        items = fetch_listings()
+        items = [i for i in fetch_listings() if worth_showing(i)]
     except Exception as e:
         print(f"Error loading shop index: {e}")
         items = []
@@ -2483,9 +2958,12 @@ def shop_index():
         grouped.setdefault(item['category'], []).append(item)
 
     # Note: not named 'items' - Jinja would resolve category.items to the dict's
-    # built-in method instead of this key.
+    # built-in method instead of this key. Consoles get photo cards; services
+    # and lessons have nothing to photograph, so they get price-list rows.
     categories = [
-        {'slug': slug, 'label': category_label(slug, labels), 'products': group}
+        {'slug': slug, 'label': category_label(slug, labels),
+         'products': [i for i in group if not i['is_service']],
+         'services': [i for i in group if i['is_service']]}
         for slug, group in sorted(grouped.items(),
                                   key=lambda entry: (order.get(entry[0], len(order)), entry[0]))
     ]
@@ -2515,55 +2993,240 @@ def listing_detail(slug):
     canonical = f"{root}/listing/{item['slug']}"
     images_abs = [root + p if p.startswith('/') else p for p in item['images']]
     labels = category_labels()
+    category_name = category_label(item['category'], labels)
 
     # Schema.org Product - this is what produces price and availability in
     # Google results rather than a plain blue link.
+    offer = {
+        '@type': 'Offer',
+        'url': canonical,
+        'priceCurrency': 'USD',
+        'price': f"{item['price']:.2f}",
+        'availability': ('https://schema.org/InStock' if item['in_stock']
+                         else 'https://schema.org/OutOfStock'),
+        'itemCondition': 'https://schema.org/RefurbishedCondition',
+        'seller': {'@type': 'Organization', 'name': 'Gameboy Retreat'},
+    }
+    if not item['is_service']:
+        offer['shippingDetails'] = shipping_details_ld()
+        offer['hasMerchantReturnPolicy'] = return_policy_ld()
     structured_data = {
         '@context': 'https://schema.org',
         '@type': 'Product',
         'name': item['title'],
         'description': item['description'],
         'image': images_abs,
-        'category': category_label(item['category'], labels),
+        'category': category_name,
         'itemCondition': 'https://schema.org/RefurbishedCondition',
         'brand': {'@type': 'Brand', 'name': 'Gameboy Retreat'},
-        'offers': {
-            '@type': 'Offer',
-            'url': canonical,
-            'priceCurrency': 'USD',
-            'price': f"{item['price']:.2f}",
-            'availability': ('https://schema.org/InStock' if item['in_stock']
-                             else 'https://schema.org/OutOfStock'),
-            'seller': {'@type': 'Organization', 'name': 'Gameboy Retreat'},
-        },
+        'offers': offer,
     }
 
-    related = [i for i in items
-               if i['category'] == item['category'] and i['slug'] != item['slug']][:4]
+    related = [i for i in items if worth_showing(i)
+               and i['category'] == item['category'] and i['slug'] != item['slug']][:4]
 
     return render_template(
         'listing.html',
         item=item,
-        category_name=category_label(item['category'], labels),
+        category_name=category_name,
         canonical=canonical,
-        og_image=images_abs[0] if images_abs else '',
-        # Rendered |safe inside <script>, so a description containing "</script>"
-        # or "<!--" could end or derail the tag. JSON reads the \u escapes back
-        # as the same characters (the same trick as Django's json_script).
-        structured_data=json.dumps(structured_data, indent=2)
-            .replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e'),
+        # The listing's own share card: photo, title, price, availability.
+        og_image=f"{root}/share/listing/{item['slug']}.jpg"
+                 f"?v={listing_card_version(item, category_name)}",
+        og_image_alt=f"{item['title']} - ${item['price']:.2f} at Gameboy Retreat",
+        # Out of the index, though the page still answers old links.
+        noindex=not worth_showing(item),
+        structured_data=ld_json(structured_data),
         related=related,
     )
 
 
+def ld_json(data):
+    """JSON-LD for a <script> tag. It is rendered |safe, so a description
+    containing "</script>" or "<!--" could end or derail the tag; JSON reads the
+    \\u escapes back as the same characters (Django's json_script trick)."""
+    return (json.dumps(data, indent=2)
+            .replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e'))
+
+
+def return_policy_ld():
+    """The 30-day warranty as schema.org data - keep in step with
+    templates/shipping_returns.html. Returns are for faulty or not-as-described
+    consoles, with return postage paid by the shop; change-of-mind returns are
+    not offered once an order ships, so no customer-remorse terms are given."""
+    return {
+        '@type': 'MerchantReturnPolicy',
+        'applicableCountry': ['US', 'CA'],
+        'returnPolicyCountry': 'US',
+        'returnPolicyCategory': 'https://schema.org/MerchantReturnFiniteReturnWindow',
+        'merchantReturnDays': 30,
+        'returnMethod': 'https://schema.org/ReturnByMail',
+        'itemDefectReturnFees': 'https://schema.org/FreeReturn',
+        'itemDefectReturnLabelSource': 'https://schema.org/ReturnLabelDownloadAndPrint',
+        'merchantReturnLink': site_root() + '/shipping-returns',
+    }
+
+
+def shipping_details_ld():
+    """Free shipping to the US and Canada (the countries Stripe Checkout
+    accepts), dispatched within TRACKING_WITHIN."""
+    details = []
+    for country in ('US', 'CA'):
+        entry = {
+            '@type': 'OfferShippingDetails',
+            'shippingRate': {'@type': 'MonetaryAmount', 'value': '0', 'currency': 'USD'},
+            'shippingDestination': {'@type': 'DefinedRegion', 'addressCountry': country},
+        }
+        if country == 'US':
+            entry['deliveryTime'] = {
+                '@type': 'ShippingDeliveryTime',
+                'handlingTime': {'@type': 'QuantitativeValue', 'minValue': 0,
+                                 'maxValue': 2, 'unitCode': 'DAY'},
+                'transitTime': {'@type': 'QuantitativeValue', 'minValue': 2,
+                                'maxValue': 5, 'unitCode': 'DAY'},
+            }
+        details.append(entry)
+    return details
+
+
 @app.context_processor
 def inject_globals():
-    """Values every template can use: the footer year, and the Search Console
-    verification token when one is configured."""
+    """Values every template can use: the footer year, the contact address, the
+    default share card, and the Search Console token when one is configured."""
     return {
         'year': datetime.now().year,
         'google_site_verification': GOOGLE_SITE_VERIFICATION,
+        'support_email': SUPPORT_EMAIL,
+        'default_og_image': share_image_url,
     }
+
+
+# ============================================================
+# SHARE CARDS AND ICONS
+# Link previews (Open Graph images) and the favicon set. The site-wide cards
+# and the icons are static files made by share_cards.py; listing cards are
+# drawn on request and kept in memory.
+# ============================================================
+
+@lru_cache(maxsize=None)
+def static_version(filename):
+    """A short hash of a static file's contents. In a URL it makes caches -
+    Facebook's in particular - fetch the file again once it changes."""
+    try:
+        with open(os.path.join(APP_DIR, 'static', filename), 'rb') as fh:
+            return hashlib.sha1(fh.read()).hexdigest()[:10]
+    except OSError:
+        return '0'
+
+
+def share_image_url(filename='gameboy-retreat.jpg'):
+    """Absolute URL of a site-wide share card in static/share/."""
+    return f"{site_root()}/static/share/{filename}?v={static_version('share/' + filename)}"
+
+
+def listing_card_version(item, category_name):
+    """Changes whenever anything on a listing's card would."""
+    import share_cards
+    key = '|'.join(str(part) for part in (
+        share_cards.DESIGN_VERSION, item['title'], f"{item['price']:.2f}",
+        item['status'], item['in_stock'], item['item_type'],
+        item['images'][0] if item['images'] else '', category_name))
+    return hashlib.sha1(key.encode('utf-8')).hexdigest()[:10]
+
+
+SHARE_CACHE_SIZE = 48          # cards kept per worker, ~90 KB each
+_share_cache = OrderedDict()
+_share_lock = threading.Lock()
+
+
+def load_card_photo(url):
+    """A listing's photo as a PIL image. Only the shop's own files are fetched:
+    the static folder or this project's Supabase Storage bucket."""
+    from PIL import Image
+    import io
+    if url.startswith('/static/'):
+        return Image.open(os.path.join(APP_DIR, url.lstrip('/').replace('/', os.sep)))
+    storage = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/"
+    if SUPABASE_URL and url.startswith(storage):
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        return Image.open(io.BytesIO(response.content))
+    return None
+
+
+@app.route('/share/listing/<slug>.jpg')
+def listing_share_card(slug):
+    """The 1200x630 preview image for /listing/<slug>. The ?v= in the URL the
+    listing page gives out changes with the listing, so this can be cached."""
+    import share_cards
+    try:
+        items = fetch_listings()
+    except Exception as e:
+        print(f"Error loading share card {slug}: {e}")
+        return redirect(share_image_url())
+    item = next((i for i in items if i['slug'] == slug), None)
+    if not item:
+        abort(404)
+
+    category_name = category_label(item['category'], category_labels())
+    key = (slug, listing_card_version(item, category_name))
+    with _share_lock:
+        jpeg = _share_cache.get(key)
+        if jpeg:
+            _share_cache.move_to_end(key)
+    if jpeg is None:
+        photo = None
+        if item['images']:
+            try:
+                photo = load_card_photo(item['images'][0])
+            except Exception as e:
+                print(f"⚠️ Share card {slug}: photo unavailable ({e}); drawing without it")
+        jpeg = share_cards.draw_listing_card(item, category_name, photo)
+        with _share_lock:
+            _share_cache[key] = jpeg
+            while len(_share_cache) > SHARE_CACHE_SIZE:
+                _share_cache.popitem(last=False)
+
+    response = Response(jpeg, mimetype='image/jpeg')
+    response.headers['Cache-Control'] = 'public, max-age=604800'
+    return response
+
+
+ICON_DIR = os.path.join(APP_DIR, 'static', 'icons')
+ICON_MAX_AGE = 7 * 24 * 3600
+
+
+@app.route('/favicon.ico')
+def favicon():
+    """Browsers and Google ask for this exact path whatever the page declares."""
+    return send_from_directory(ICON_DIR, 'favicon.ico', mimetype='image/x-icon',
+                               max_age=ICON_MAX_AGE)
+
+
+@app.route('/apple-touch-icon.png')
+@app.route('/apple-touch-icon-precomposed.png')
+def apple_touch_icon():
+    """iPhones look here for the home-screen icon (and for link previews)."""
+    return send_from_directory(ICON_DIR, 'apple-touch-icon.png', mimetype='image/png',
+                               max_age=ICON_MAX_AGE)
+
+
+@app.route('/site.webmanifest')
+def web_manifest():
+    """Name, colours and icons for "Add to Home Screen" on Android."""
+    manifest = {
+        'name': 'Gameboy Retreat',
+        'short_name': 'GB Retreat',
+        'start_url': '/',
+        'display': 'browser',
+        'background_color': '#0a0a0a',
+        'theme_color': '#0a0a0a',
+        'icons': [
+            {'src': f'/static/icons/icon-{n}.png', 'sizes': f'{n}x{n}', 'type': 'image/png'}
+            for n in (192, 512)
+        ],
+    }
+    return Response(json.dumps(manifest, indent=2), mimetype='application/manifest+json')
 
 
 @app.route('/robots.txt')
@@ -2598,11 +3261,12 @@ def sitemap_xml():
         {'loc': f'{root}/', 'priority': '1.0', 'changefreq': 'weekly'},
         {'loc': f'{root}/shop', 'priority': '0.9', 'changefreq': 'daily'},
         {'loc': f'{root}/play', 'priority': '0.5', 'changefreq': 'monthly'},
+        {'loc': f'{root}/shipping-returns', 'priority': '0.3', 'changefreq': 'yearly'},
         {'loc': f'{root}/privacy', 'priority': '0.2', 'changefreq': 'yearly'},
     ]
     urls += [
         {'loc': f"{root}/listing/{i['slug']}", 'priority': '0.8', 'changefreq': 'weekly'}
-        for i in items
+        for i in items if worth_showing(i)
     ]
 
     xml = ['<?xml version="1.0" encoding="UTF-8"?>',
@@ -2807,6 +3471,9 @@ def webhook():
             surface = meta.get('surface', 'unknown')
             ref = clean_ref(meta.get('ref')) or 'direct'
             last_ref = clean_ref(meta.get('last_ref')) or ref
+            # The payment itself - refunds are made against it, and Stripe's
+            # refund events name it, not the Checkout Session.
+            payment_intent = session.get('payment_intent')
 
             # What was actually bought, straight from Stripe rather than the
             # browser's version of the cart.
@@ -2827,9 +3494,11 @@ def webhook():
                     cursor.execute('''
                         INSERT INTO orders (session_id, customer_email, customer_name,
                                             amount, shipping_address, items, surface,
-                                            ref, last_ref)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (session_id) DO NOTHING
+                                            ref, last_ref, payment_intent)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (session_id) DO UPDATE
+                        SET payment_intent = COALESCE(orders.payment_intent,
+                                                      EXCLUDED.payment_intent)
                     ''', (
                         session_id,
                         customer_email,
@@ -2840,6 +3509,7 @@ def webhook():
                         surface,
                         ref,
                         last_ref,
+                        payment_intent,
                     ))
                 print(f"✅ Order saved: {session_id}")
             except Exception as db_err:
@@ -2880,6 +3550,19 @@ def webhook():
             if hold_token:
                 release_hold(hold_token)
                 print(f"↩️ Released hold {hold_token} ({event['type']})")
+
+        elif event['type'] in REFUND_EVENTS:
+            # A refund made or changed anywhere - the orders page or the Stripe
+            # dashboard. Re-reading all of the payment's refunds makes repeats
+            # and out-of-order events harmless. An error here returns 400 so
+            # Stripe retries later.
+            payment_intent = event['data']['object'].get('payment_intent')
+            if isinstance(payment_intent, dict):
+                payment_intent = payment_intent.get('id')
+            if payment_intent:
+                order_id = sync_refunds(payment_intent)
+                print(f"↩️ Refunds synced for {order_number(order_id)}" if order_id
+                      else f"ℹ️ {event['type']} for {payment_intent}: not a shop order")
 
         return jsonify({'status': 'success'})
 

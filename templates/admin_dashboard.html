@@ -36,17 +36,31 @@
     {#- order['items'], never order.items: Jinja would find the dict's items() method. -#}
     <ol class="order-list">
         {% for o in orders %}
-        <li class="order-card{{ ' is-shipped' if o.tracking_number }}" id="order-{{ o.id }}">
+        {% set closed = o.state in ('cancelled', 'returned', 'refunded') %}
+        <li class="order-card{{ ' is-shipped' if o.state == 'shipped' }}{{ ' is-closed' if closed }}" id="order-{{ o.id }}">
             <div class="order-head">
                 <strong>{{ o.number }}</strong>
                 <span class="muted">{{ o.placed_on }}</span>
-                <span class="order-total">${{ '%.2f'|format(o.amount) }}</span>
-                {% if o.tracking_number %}
+                <span class="order-total">
+                    {% if o.refunded %}<s class="muted">${{ '%.2f'|format(o.amount) }}</s> ${{ '%.2f'|format(o.refundable) }}{% else %}${{ '%.2f'|format(o.amount) }}{% endif %}
+                </span>
+                {% if o.state == 'cancelled' %}
+                <span class="flag flag-bad">Cancelled</span>
+                {% elif o.state == 'returned' %}
+                <span class="flag flag-bad">Returned</span>
+                {% elif o.state == 'shipped' %}
                 <span class="flag flag-ok">Shipped {{ o.shipped_on }}</span>
-                {% elif o.address_lines %}
+                {% elif o.state == 'refunded' %}
+                <span class="flag flag-bad">{% if o.address_lines %}Refunded - don't ship{% else %}Refunded{% endif %}</span>
+                {% elif o.state == 'to_ship' %}
                 <span class="flag flag-warn">To ship</span>
                 {% else %}
                 <span class="flag">No shipping</span>
+                {% endif %}
+                {% if o.refund_state == 'partial' %}
+                <span class="flag flag-warn">Refunded ${{ '%.2f'|format(o.refunded) }}</span>
+                {% elif o.refund_state == 'full' and o.state != 'refunded' %}
+                <span class="flag">Refunded in full</span>
                 {% endif %}
             </div>
 
@@ -93,6 +107,10 @@
                         <form method="post" action="/admin/orders/{{ o.id }}/email/shipped" class="inline-form">
                             <button class="btn-small">{{ 'Resend' if o.shipped_email_sent_at else 'Send' }}</button>
                         </form>
+                    {% elif not o.address_lines %}
+                        <span class="muted">Nothing to ship &mdash; service or lesson.</span>
+                    {% elif closed %}
+                        <span class="muted">Not shipping &mdash; {{ 'cancelled' if o.state == 'cancelled' else ('returned' if o.state == 'returned' else 'refunded in full') }}.</span>
                     {% else %}
                         <form method="post" action="/admin/orders/{{ o.id }}/ship" class="ship-form">
                             <select name="carrier" aria-label="Carrier">
@@ -108,6 +126,91 @@
                         </form>
                     {% endif %}
                 </div>
+
+                <div class="order-email">
+                    <span class="field-label">Refunds</span>
+                    {% if o.refunds %}
+                    <ul class="refund-list">
+                        {% for r in o.refunds %}
+                        <li>
+                            <strong>${{ '%.2f'|format(r.amount) }}</strong>
+                            <span class="muted">{{ r.date }} &middot;
+                            {% if r.source == 'stripe' %}made in Stripe{% else %}{{ {'cancel': 'cancellation', 'return': 'return', 'refund': 'refund'}.get(r.action, 'refund') }}{% endif %}{% if r.reason %} &middot; {{ r.reason }}{% endif %}</span>
+                            {% if not r.counted %}<span class="flag flag-bad">{{ r.status }}</span>{% elif r.status != 'succeeded' %}<span class="flag flag-warn">{{ r.status }}</span>{% endif %}
+                            {% if r.note %}<br><span class="muted">&ldquo;{{ r.note }}&rdquo;</span>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <span class="muted">None</span>
+                    {% endif %}
+                    {% if o.restocked_at %}
+                    <span class="flag">Back in stock</span>
+                    {% elif o.stock_units and (closed or o.refund_state != 'none') %}
+                    <form method="post" action="/admin/orders/{{ o.id }}/restock" class="inline-form">
+                        <button class="btn-small">Put {{ o.stock_units }} back in stock</button>
+                    </form>
+                    {% endif %}
+                </div>
+
+                {% if o.refundable > 0 or o.state not in ('cancelled', 'returned') %}
+                {% set default_action = 'return' if o.tracking_number else 'cancel' %}
+                <details class="manage-order">
+                    <summary>Cancel / return / refund</summary>
+                    <form method="post" action="/admin/orders/{{ o.id }}/refund" class="refund-form"
+                          data-number="{{ o.number }}" data-refundable="{{ '%.2f'|format(o.refundable) }}">
+                        <input type="hidden" name="token" value="{{ o.refund_token }}">
+                        <fieldset class="refund-actions">
+                            <legend class="field-label">What happened?</legend>
+                            {% for key, spec in refund_actions.items() %}
+                            {% set blocked = key == 'cancel' and o.tracking_number %}
+                            <label class="{{ 'is-disabled' if blocked }}">
+                                <input type="radio" name="action" value="{{ key }}"
+                                       {{ 'disabled' if blocked }} {{ 'checked' if key == default_action }}>
+                                {{ spec[0] }}{% if blocked %} <span class="muted">(already shipped)</span>{% endif %}
+                            </label>
+                            {% endfor %}
+                        </fieldset>
+                        <div class="refund-fields">
+                            <label>
+                                <span class="field-label">Refund (up to ${{ '%.2f'|format(o.refundable) }})</span>
+                                <input type="number" name="amount" min="0" step="0.01"
+                                       max="{{ '%.2f'|format(o.refundable) }}"
+                                       value="{{ '%.2f'|format(o.refundable) }}" required>
+                            </label>
+                            <label>
+                                <span class="field-label">Why (only you see this)</span>
+                                <select name="reason">
+                                    {% for key, label in refund_reasons.items() %}
+                                    <option value="{{ key }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                        </div>
+                        <label class="refund-note">
+                            <span class="field-label">Message to the customer (optional, goes in the email)</span>
+                            <textarea name="note" rows="2" maxlength="500"
+                                      placeholder="e.g. Sorry it arrived with a dead pixel - thanks for sending it back."></textarea>
+                        </label>
+                        <div class="refund-checks">
+                            {% if o.stock_units and not o.restocked_at %}
+                            <label><input type="checkbox" name="restock" value="1" {{ 'checked' if default_action != 'refund' }}>
+                                Put {{ o.stock_units }} console{{ '' if o.stock_units == 1 else 's' }} back in stock</label>
+                            {% endif %}
+                            <label><input type="checkbox" name="notify" value="1" checked> Email the customer</label>
+                        </div>
+                        <div class="refund-submit">
+                            <a href="/admin/orders/{{ o.id }}/email/refund" class="preview-refund"
+                               target="_blank" rel="noopener">Preview email</a>
+                            <button type="submit" class="btn-refund">Refund</button>
+                        </div>
+                        <p class="hint">
+                            The money goes back to the card the customer paid with, through
+                            Stripe ({{ refund_arrives }} to show). A refund can't be undone.
+                        </p>
+                    </form>
+                </details>
+                {% endif %}
             </div>
         </li>
         {% endfor %}
@@ -130,6 +233,67 @@
                 tracking_number: form.elements.tracking_number.value
             });
             link.href = link.href.split('?')[0] + '?' + params.toString();
+        });
+    });
+
+    // Cancel / return / refund: the button says exactly what will happen, and
+    // nothing is refunded without a confirmation.
+    document.querySelectorAll('.refund-form').forEach(function (form) {
+        var button = form.querySelector('.btn-refund');
+        var restock = form.elements.restock;
+        var preview = form.querySelector('.preview-refund');
+
+        function action() {
+            var checked = form.querySelector('input[name=action]:checked');
+            return checked ? checked.value : 'refund';
+        }
+        function amount() {
+            var n = parseFloat(form.elements.amount.value);
+            return isNaN(n) ? 0 : n;
+        }
+        function money(n) { return '$' + n.toFixed(2); }
+        function describe() {
+            var a = action(), n = amount();
+            if (a === 'cancel') return n > 0 ? 'Cancel & refund ' + money(n) : 'Cancel order (no refund)';
+            if (a === 'return') return n > 0 ? 'Record return & refund ' + money(n) : 'Record return (no refund)';
+            return 'Refund ' + money(n);
+        }
+        function update() { button.textContent = describe(); }
+
+        form.querySelectorAll('input[name=action]').forEach(function (radio) {
+            radio.addEventListener('change', function () {
+                // Nothing comes back with a refund-only, so nothing goes back on sale.
+                if (restock) restock.checked = radio.value !== 'refund';
+                update();
+            });
+        });
+        form.elements.amount.addEventListener('input', update);
+        update();
+
+        preview.addEventListener('click', function () {
+            var params = new URLSearchParams({
+                action: action(), amount: amount().toFixed(2), note: form.elements.note.value
+            });
+            preview.href = preview.href.split('?')[0] + '?' + params.toString();
+        });
+
+        form.addEventListener('submit', function (e) {
+            var a = action(), n = amount();
+            if (a === 'refund' && n <= 0) {
+                e.preventDefault();
+                alert('Enter how much to refund.');
+                return;
+            }
+            var lines = [form.dataset.number + ': ' + describe() + '?'];
+            if (n > 0) lines.push('', money(n) + " goes back to the customer's card through Stripe. This can't be undone.");
+            if (restock && restock.checked) lines.push('The console goes back on sale.');
+            if (form.elements.notify.checked) lines.push('The customer gets an email.');
+            if (!confirm(lines.join('\n'))) {
+                e.preventDefault();
+                return;
+            }
+            button.disabled = true;     // one click, one refund (the server checks too)
+            button.textContent = 'Working…';
         });
     });
 </script>

@@ -1,0 +1,128 @@
+{% extends "public_base.html" %}
+
+{#- Keep in step with: the listing pages' spec lists (templates/listing.html),
+    the footer's warranty blurb, return_policy_ld() / shipping_details_ld() in
+    app.py, and the Game Boy's summary (MENUS['shipping-menu'] in static/script.js).
+    Change SHIPPING_POLICY_UPDATED in app.py whenever this page changes. -#}
+
+{% block title %}Shipping &amp; Returns | Gameboy Retreat{% endblock %}
+{% block og_title %}Shipping &amp; Returns{% endblock %}
+{% block description %}Free shipping to the US and Canada, tracking within {{ ship_within }}, and a 30-day warranty on every console and repair. How cancellations, returns and refunds work.{% endblock %}
+{% block og_description %}Free shipping, tracking within {{ ship_within }}, and a 30-day warranty on every console and repair.{% endblock %}
+
+{% block content %}
+<article class="prose policy">
+    <h1>Shipping &amp; returns</h1>
+    <p class="muted">Last updated {{ updated }}</p>
+
+    <p>
+        Every console ships tested and packed carefully, and every console and
+        repair is covered by a <strong>30-day warranty</strong>. Here is exactly how
+        shipping, cancellations, returns and refunds work. Anything not answered
+        here: <a href="mailto:{{ support_email }}">{{ support_email }}</a>, with a
+        reply within 24 hours.
+    </p>
+
+    <ul class="policy-points">
+        <li><strong>Free shipping</strong> to the US and Canada</li>
+        <li><strong>Tracking within {{ ship_within }}</strong></li>
+        <li><strong>30-day warranty</strong> on consoles and repairs</li>
+        <li><strong>Cancel for a full refund</strong> any time before it ships</li>
+    </ul>
+
+    <h2 id="shipping">Shipping</h2>
+    <ul>
+        <li><strong>Free on every order</strong> to the United States and Canada.</li>
+        <li>
+            <strong>Ships from Stockton, California.</strong> Your tracking number
+            arrives by email within {{ ship_within }} of your order.
+        </li>
+        <li>
+            <strong>Delivery:</strong> most US orders arrive 2&ndash;5 business days
+            after they ship. Orders to Canada take longer because they pass through
+            customs, and any import duties or taxes charged on delivery are paid by
+            the recipient.
+        </li>
+        <li><strong>Packing:</strong> every console is wrapped and boxed to survive the trip.</li>
+    </ul>
+
+    <h2 id="cancellations">Changed your mind? Cancel before it ships</h2>
+    <p>
+        Email <a href="mailto:{{ support_email }}">{{ support_email }}</a> with your
+        order number (it starts with GBR-) before your tracking number arrives, and
+        the order is cancelled and refunded in full. Once an order has shipped it
+        can't be cancelled &mdash; but the warranty below still covers it.
+    </p>
+
+    <h2 id="returns">Returns and the 30-day warranty</h2>
+    <p>
+        Every console is covered for 30 days from delivery. If it develops a fault,
+        or it isn't as described, it gets put right:
+    </p>
+    <ul>
+        <li>
+            <strong>Repaired, replaced or refunded in full</strong> &mdash; your choice.
+            Most consoles are one of a kind, so a like-for-like replacement depends on
+            what is in stock.
+        </li>
+        <li><strong>Return shipping is on us:</strong> you get a prepaid label by email.</li>
+    </ul>
+    <p>
+        <strong>To start a return,</strong> email
+        <a href="mailto:{{ support_email }}">{{ support_email }}</a> with your order
+        number and what's wrong &mdash; a short video or a photo helps. You'll hear
+        back within 24 hours.
+    </p>
+    <p>
+        Because every console is a one-off restoration, change-of-mind returns aren't
+        accepted once an order has shipped. Cancel before it ships instead, as above.
+    </p>
+
+    <h3>What the warranty doesn't cover</h3>
+    <ul>
+        <li>Accidental damage: drops, cracks, liquid</li>
+        <li>Normal wear, such as scratches from use</li>
+        <li>A console opened, repaired or modified by someone else after delivery</li>
+        <li>Games and accessories that weren't part of your order</li>
+    </ul>
+
+    <h2 id="damaged">Arrived damaged, or lost in the mail?</h2>
+    <p>
+        If your package arrives damaged, email us within 48 hours of delivery with
+        photos of the box and the console. The carrier claim is handled on our side,
+        and you get a repair, a replacement or a full refund. If tracking stops
+        moving for more than 7 days, or says delivered but nothing came, email us
+        and it gets chased with the carrier and sorted out.
+    </p>
+
+    <h2 id="refunds">Refunds</h2>
+    <p>
+        Refunds go back to the card you paid with, through Stripe &mdash; the same way
+        you paid. A refund is issued as soon as a cancellation is confirmed or your
+        return arrives back, and you get an email confirming it. Your bank usually
+        shows it within {{ refund_arrives }}. Shipping was free, so nothing is
+        deducted for it.
+    </p>
+
+    <h2 id="services">Repairs and mod services</h2>
+    <p>
+        You post your console in and it comes back to you, return shipping included.
+        Turnaround is typically 5&ndash;7 days from when it arrives, and all work is
+        covered by the same 30-day warranty. Changed your mind before sending your
+        console? Email us for a full refund.
+    </p>
+
+    <h2 id="lessons">Lessons</h2>
+    <p>
+        Lessons are one-to-one over Zoom. You'll get an email within 24 hours to book
+        a time that suits you. Rescheduling is free with 24 hours' notice, and
+        cancelling with at least 24 hours' notice gets a full refund.
+    </p>
+
+    <h2 id="contact">Contact</h2>
+    <p>
+        <a href="mailto:{{ support_email }}">{{ support_email }}</a><br>
+        Gameboy Retreat &middot; Stockton, CA &middot; replies within 24 hours
+    </p>
+</article>
+{% endblock %}
